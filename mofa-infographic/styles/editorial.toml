@@ -1,0 +1,62 @@
+[meta]
+name = "editorial"
+display_name = "Editorial"
+description = "Clean serif typography, magazine-quality layout, warm neutral tones"
+category = "publishing"
+tags = ["magazine", "editorial", "serif", "clean"]
+
+[variants]
+default = "normal"
+
+[variants.header]
+prompt = """
+Create an infographic header section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: Clean white (#FFFFFF) to very light warm gray (#F8F6F3).
+
+DESIGN:
+- Large serif title (like Playfair Display or Georgia), dark charcoal (#1A1A1A), 48-64pt, bold
+- Thin decorative line below title in warm gold (#C8973E) or black, 1px
+- Subtitle in sans-serif, medium gray (#666666), 18-22pt, lighter weight
+- Optional: large decorative drop cap or oversized first letter
+- Magazine masthead aesthetic — elegant, authoritative, timeless
+
+TYPOGRAPHY: Serif for headlines (Playfair Display, Georgia), sans-serif (Inter, Helvetica) for body.
+
+ATMOSPHERE: Premium magazine cover or feature article opener. The New York Times, The Economist, or Monocle quality.
+"""
+
+[variants.normal]
+prompt = """
+Create an infographic content section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: White (#FFFFFF) — clean editorial.
+
+DESIGN:
+- Content organized in clean columns (2 or 3 column grid)
+- Stat numbers in large serif font, dark (#1A1A1A) or warm accent (#C8973E), 40-56pt
+- Body text in sans-serif, dark charcoal (#333333), 14-16pt with generous line height
+- Thin hairline rules (#E0E0E0, 0.5px) as section dividers
+- Pull quotes in large italic serif with quotation marks
+- Simple data charts: bar charts in muted tones, clean axis labels
+- Minimal decoration — let typography and white space do the work
+
+TYPOGRAPHY: Serif for numbers and pull quotes, sans-serif for body text.
+
+CRITICAL: Magazine editorial quality — every element placed with typographic precision. Clean, readable, authoritative.
+"""
+
+[variants.footer]
+prompt = """
+Create an infographic footer section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: White (#FFFFFF) or very faint warm gray (#FAFAF8).
+
+DESIGN:
+- Sources in small serif italic, light gray (#999999), 9-10pt
+- Thin black hairline rule at top
+- Credits and attribution in clean, understated typography
+- Optional: small decorative flourish or rule at bottom center
+
+TYPOGRAPHY: Small, elegant, understated. Serif italic for sources.
+"""

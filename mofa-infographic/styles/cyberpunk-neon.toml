@@ -1,0 +1,62 @@
+[meta]
+name = "cyberpunk-neon"
+display_name = "Cyberpunk Neon"
+description = "Dark background, neon accent lines, futuristic data visualization"
+category = "tech"
+tags = ["dark", "neon", "futuristic", "data"]
+
+[variants]
+default = "normal"
+
+[variants.header]
+prompt = """
+Create an infographic header section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: Deep dark navy (#0A0E1A) to dark teal (#0D1B2A) gradient. Rich, atmospheric.
+
+DESIGN:
+- Large bold title text in white (#FFFFFF) or electric cyan (#00D4FF), 48-64pt
+- Subtitle in light gray (#8892A0), 20-24pt
+- Thin neon accent lines (#00D4FF, #FF6A00) as decorative elements: horizontal rules, corner brackets, grid lines
+- Subtle holographic or circuit pattern at 10-15% opacity in the background
+- Futuristic HUD-style corner decorations
+
+TYPOGRAPHY: Clean futuristic sans-serif (Inter, Barlow, or Rajdhani style).
+
+ATMOSPHERE: Dark, premium, tech-forward. Think: a high-tech dashboard header.
+"""
+
+[variants.normal]
+prompt = """
+Create an infographic content section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: Dark navy (#0A0E1A) — consistent with other sections.
+
+DESIGN:
+- KPI cards or stat callouts on semi-transparent dark panels (#0A0E1A at 80% opacity) with thin cyan (#00D4FF) borders
+- Large stat numbers in electric cyan (#00D4FF) or neon orange (#FF6A00), 48-72pt bold
+- Stat labels in light gray (#8892A0), 14-18pt
+- Data visualizations: bar charts, progress bars, or node graphs in neon colors
+- Thin grid lines at 5-10% opacity for structure
+- Icons in thin line style, cyan or white
+
+TYPOGRAPHY: Clean sans-serif. White for headings, gray for body, cyan/orange for accent numbers.
+
+CRITICAL: Data-forward — the numbers and charts are the heroes. Neon accents draw the eye to key metrics.
+"""
+
+[variants.footer]
+prompt = """
+Create an infographic footer section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: Deep dark navy (#0A0E1A), slightly darker than body sections.
+
+DESIGN:
+- Sources and credits in small light gray (#666666) text, 10-12pt
+- Thin cyan (#00D4FF) horizontal rule at the top separating from content
+- Optional: small logo placeholder area, QR code placeholder
+- Minimal decorative elements: fading circuit pattern, subtle grid
+- Clean, understated — this section supports, doesn't compete
+
+TYPOGRAPHY: Small, light weight, gray tones. Clean sans-serif.
+"""

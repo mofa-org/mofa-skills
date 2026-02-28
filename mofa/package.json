@@ -1,0 +1,13 @@
+{
+  "name": "mofa",
+  "version": "1.0.0",
+  "description": "Shared engine for mofa skills (slides, cards, video, comic, infographic)",
+  "main": "lib/engine.js",
+  "type": "commonjs",
+  "dependencies": {
+    "@google/genai": "^1.40.0",
+    "@iarna/toml": "^2.2.5",
+    "pptxgenjs": "^4.0.1",
+    "sharp": "^0.34.5"
+  }
+}

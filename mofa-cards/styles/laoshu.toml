@@ -1,0 +1,87 @@
+[meta]
+name = "laoshu"
+display_name = "Laoshu 老吴画画"
+description = "Minimal ink-wash figure in Republic-era gown, vivid color accents, folk poetry"
+category = "art"
+tags = ["ink-wash", "Chinese", "folk", "poetry"]
+
+[variants]
+default = "front"
+
+[variants.front]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a greeting card in the style of Chinese artist "老吴画画" (Old Tree / Liu Shuyong). This is a VERY SPECIFIC art style — read carefully:
+
+BACKGROUND: Warm off-white rice paper (#FFF8F0 to #FFFDF5), with subtle handmade paper texture. Clean and warm.
+
+ILLUSTRATION STYLE — 老吴画画 (Old Tree Painting):
+- A SINGLE human figure in traditional Chinese Republic-era long gown and mandarin jacket (民国长衫马褂), drawn with minimal brush strokes — just a few ink lines to suggest the body, sleeves, and posture. The figure is simple, almost childlike in drawing style but with confident brush strokes.
+- The figure has a simple round or bald head, NO detailed facial features — at most a dot for an eye or a simple smile line. Think: a stick figure elevated to brush-and-ink art.
+- The figure is placed in a nature scene: standing under a tree, sitting on a rock, walking on a path, leaning against bamboo, looking at the moon, etc. The scene is MINIMAL — a few brush strokes for a tree trunk, some color-wash leaves, a rock, distant mountains as 2-3 ink wash strokes.
+- COLOR ACCENTS (CRITICAL): Against the monochrome ink figure and landscape, add VIVID color accents — bright red (#E63946) flowers or berries, fresh green (#4A7C59) leaves, golden yellow (#E8B931) ginkgo leaves, or pink (#E8A0BF) blossoms. These color pops are what make 老吴画画's style instantly recognizable. The colors should be bold flat washes, not blended gradients.
+- 50-60% of the card should be EMPTY rice paper space. The composition is extremely airy.
+- The overall feeling: a quick, effortless sketch by a master who draws with the casual confidence of someone doodling during a tea break — but every stroke is perfect.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- A short poem (4-8 lines of casual modern Chinese) written in handwritten brush calligraphy style — NOT formal 楷书, more like casual 行书 or even slightly messy personal handwriting. The text should look hand-brushed, relaxed, slightly uneven — like someone jotting down a thought.
+- Text positioned alongside or above/below the illustration, following traditional Chinese painting inscription (题款) conventions — but the content is modern colloquial Chinese, NOT classical poetry.
+- Text color: black or dark gray ink.
+- A small red seal stamp (印章) near the text, with the characters "老吴画画" engraved on it.
+
+COMPOSITION: Asymmetric. The figure and scene occupy maybe 30-40% of the card area, with the poem taking another 20-30%, and the rest is beautiful empty space. Nothing is centered — things are placed organically, like a page from a sketchbook.
+
+CRITICAL: This must look like an actual 老吴画画 painting — the charm is in the CONTRAST between the traditional ink-wash medium and the casual, modern, humorous voice. The figure should feel lonely but content, the scene should feel quiet but alive with color accents. It's folk wisdom painted on rice paper.
+"""
+
+[variants.greeting]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a greeting card emphasizing TEXT, in the style of "老吴画画" (Old Tree / Liu Shuyong).
+
+BACKGROUND: Warm rice paper (#FFF8F0). Subtle paper texture. Clean, warm.
+
+ILLUSTRATION STYLE — 老吴画画:
+- A SMALL ink-wash illustration as accent — a simple figure in 民国长衫马褂 (Republic-era long gown and mandarin jacket), or just a nature element: a branch with red berries, a tree with colored leaves, a potted plant, a tea cup with steam. Minimal, 2-5 brush strokes maximum for the element.
+- Illustration occupies only 15-25% of the card, positioned at top or bottom.
+- ONE vivid color accent: red flowers, green leaves, or yellow fruit against monochrome ink.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- The poem/greeting text is the MAIN FOCUS, occupying 40-50% of the card.
+- Written in casual handwritten brush calligraphy — relaxed, slightly uneven, warm. Like a personal note.
+- Text is arranged in vertical columns (traditional Chinese right-to-left) or horizontal lines — whichever feels more natural for the content.
+- The text should be LARGE and readable — this is a greeting card, the words matter.
+- Black ink for main text. A red seal stamp at the end, with "老吴画画" engraved on it.
+
+COMPOSITION: Text-dominant. The small illustration provides visual interest, but the handwritten poem is the heart of the card. Generous empty space around everything.
+
+CRITICAL: The text should feel like reading a handwritten note from a wise, funny friend — warm and personal. NOT formal calligraphy. The casualness IS the style.
+"""
+
+[variants.scene]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a scenic greeting card in the style of "老吴画画" (Old Tree / Liu Shuyong).
+
+BACKGROUND: Warm rice paper (#FFF8F0 to #FFFDF5).
+
+ILLUSTRATION STYLE — 老吴画画:
+- A complete scene with a figure in 民国长衫马褂 (Republic-era long gown and mandarin jacket) in a natural setting. The scene tells a small story or captures a moment.
+- The figure is simple (minimal ink brush strokes, round head, 长衫马褂), doing something contemplative: drinking under a tree, walking in rain with an umbrella, sitting by a river, standing in falling leaves, watching fireworks from afar.
+- Nature rendered in minimal ink wash: tree trunks in dark ink, mountains in pale wash, water as a few horizontal strokes.
+- VIVID COLOR ACCENTS against the monochrome: a tree FULL of red flowers (#E63946), bright green bamboo (#4A7C59), golden autumn leaves (#E8B931), pink spring blossoms. The color should be generous in this variant — maybe 20-30% of the illustration area — creating a lush, vibrant focal point.
+- 40% empty rice paper space. The figure should feel small in the landscape.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- A short inscription (2-4 lines) tucked into a corner or along one edge, in casual handwritten calligraphy.
+- Small red seal stamp with "老吴画画" engraved on it.
+- Text is secondary to the scene but adds the poetic/humorous commentary that defines 老吴's work.
+
+COMPOSITION: The scene dominates. Figure is small but central to the story. Vivid colored nature element (flowering tree, autumn foliage) creates visual drama. Empty space creates breathing room and atmosphere.
+
+CRITICAL: This should feel like a beautiful page torn from 老吴画画's sketchbook — a quiet moment captured with humor and warmth. The colored element (flowers, leaves) against ink wash is the visual signature.
+"""
+

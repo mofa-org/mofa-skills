@@ -1,0 +1,89 @@
+[meta]
+name = "cny-guochao"
+display_name = "CNY Guochao 国潮"
+description = "Chinese New Year neo-Chinese style, red and gold, bold graphic illustration"
+category = "festive"
+tags = ["CNY", "guochao", "festive", "Chinese"]
+
+[variants]
+default = "front"
+
+[variants.front]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a GREETING CARD, not a presentation slide. The entire image is one cohesive piece of art — a single vertical composition.
+
+BACKGROUND: Rich Chinese red (#CC2936) as dominant base, with gradient transitions to deep crimson (#8B0000) at edges. Gold (#D4AF37) accents woven throughout as clouds, borders, or light rays.
+
+ILLUSTRATION STYLE — 国潮 (Guochao / Neo-Chinese):
+- Modern reinterpretation of traditional Chinese art. Bold, confident outlines with flat color fills and subtle texture.
+- Think: modern Chinese poster art meets traditional woodblock print meets street art energy.
+- NOT photorealistic. NOT cute cartoon. NOT watercolor. It is BOLD, GRAPHIC, and VIBRANT.
+- Key motifs: dragon (龙), red lanterns (红灯笼), plum blossoms (梅花), golden clouds (祥云), paper-cut patterns (剪纸), firecrackers (鞭炮), red envelopes (红包).
+- Illustration should fill 60-70% of the card. Large, dramatic, and filling the vertical space.
+- Colors: red (#CC2936, #B22222), gold (#D4AF37, #FFD700), black ink outlines, touches of warm white (#FFF5E6).
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- Main greeting: 1-4 large Chinese characters in bold calligraphic style, gold (#FFD700) or warm white, 72-96pt equivalent. Examples: "恭贺新禧", "新春大吉", "龙年大吉".
+- Place text where it integrates naturally with the illustration — not floating disconnected.
+- Font feel: Noto Serif SC or bold Chinese calligraphy, confident brush energy.
+- NO English text anywhere on the card.
+
+COMPOSITION: Vertical flow — illustration and text interweave from top to bottom. The eye travels naturally down the card. No rigid grid. Organic yet balanced.
+
+CRITICAL: This must feel like a premium Chinese New Year greeting card — the kind you'd buy at a high-end stationery store in Beijing or Shanghai. Festive, bold, culturally rich, and modern.
+"""
+
+[variants.greeting]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a GREETING CARD for Chinese New Year. The emphasis is on the BLESSING TEXT with decorative support.
+
+BACKGROUND: Deep red (#9B1B30) to crimson (#CC2936) gradient, or rich gold (#D4AF37) with red accents. Warm and inviting.
+
+ILLUSTRATION STYLE — 国潮 (Guochao / Neo-Chinese):
+- Decorative elements frame the text: golden clouds (祥云) at top and bottom, plum blossom branches along edges, paper-cut style borders, small lantern motifs.
+- Illustration occupies 30-40% of the card — it supports the text, not overwhelms it.
+- Style: bold outlines, flat color fills, traditional Chinese decorative patterns reimagined with modern graphic energy.
+- Colors: red (#CC2936), gold (#D4AF37, #FFD700), black ink accents, warm white (#FFF5E6).
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- Main greeting: 4-8 large characters, bold calligraphic style, gold or warm white, centered or artfully placed. 60-80pt equivalent.
+- Secondary blessing: 2-4 lines of smaller text (24-32pt), warm white or light gold, expressing New Year wishes.
+- Example text layout:
+  "恭贺新禧" (large, prominent)
+  "万事如意 阖家欢乐" (medium)
+  "新的一年 平安喜乐" (smaller, elegant)
+- Font feel: Noto Serif SC for body, bold Chinese calligraphy for main greeting.
+
+COMPOSITION: Text is the hero. Centered vertically with generous breathing room. Decorative elements create a frame or gentle border without competing with the message.
+
+CRITICAL: Balance between text and decoration. The blessing must be instantly readable. The decorations enhance the festive mood without clutter. Premium quality, warm and heartfelt.
+"""
+
+[variants.scene]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a SCENIC greeting card for Chinese New Year — a full illustration that tells a story of celebration and reunion.
+
+BACKGROUND: The scene itself IS the background. Rich, warm color palette dominated by reds, golds, and warm amber tones.
+
+ILLUSTRATION STYLE — 国潮 (Guochao / Neo-Chinese):
+- A complete vertical scene depicting Chinese New Year celebration. Full-bleed illustration, edge to edge.
+- Possible scenes: family reunion dinner (年夜饭) with a round table of dishes; a traditional Chinese village/street with hanging red lanterns and fireworks in night sky; children in traditional clothing playing with firecrackers and sparklers; a traditional Chinese courtyard (四合院) decorated for New Year with spring couplets (春联) on doors.
+- Style: bold graphic illustration, modern Guochao aesthetic. Strong outlines, layered flat colors with texture. Warm lighting — lantern glow, firecracker sparks, golden ambient light.
+- NOT photorealistic. Think: editorial illustration for a premium Chinese lifestyle magazine.
+- Rich detail but organized composition — the eye can rest and explore.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- Minimal text: just 2-4 characters subtly integrated into the scene. Example: "新春快乐" on a lantern, or "福" on a door decoration. The text is PART of the scene, not overlaid.
+- Font: traditional Chinese calligraphy style, as if hand-written on a lantern or banner within the scene.
+
+COMPOSITION: Vertical storytelling — the scene unfolds from top (sky/fireworks) to bottom (ground/people). Depth through layering: foreground details, middle-ground action, background atmosphere.
+
+CRITICAL: This should feel like a collectible art print — a Chinese New Year scene so beautiful and rich that you'd want to frame it. Warm, nostalgic, celebratory, and culturally authentic.
+"""
+

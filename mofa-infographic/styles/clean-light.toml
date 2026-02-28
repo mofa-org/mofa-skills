@@ -1,0 +1,61 @@
+[meta]
+name = "clean-light"
+display_name = "Clean Light"
+description = "White background, minimal design, data-forward, consulting-grade clarity"
+category = "business"
+tags = ["minimal", "light", "business", "consulting"]
+
+[variants]
+default = "normal"
+
+[variants.header]
+prompt = """
+Create an infographic header section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: Pure white (#FFFFFF).
+
+DESIGN:
+- Title in clean bold sans-serif (Inter, Helvetica), dark (#1A1A1A), 44-56pt
+- Accent color: single blue (#0066CC) or teal (#00A99D) used for one decorative element (thin line, dot, or accent word)
+- Subtitle in medium gray (#666666), 18-22pt, light weight
+- Extreme white space — at least 40% of the section is empty
+- No decorations except one thin colored accent line
+
+TYPOGRAPHY: Clean sans-serif throughout. Tight kerning, generous line height.
+
+ATMOSPHERE: McKinsey or BCG consulting deck cover page — confidence through simplicity.
+"""
+
+[variants.normal]
+prompt = """
+Create an infographic content section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: Pure white (#FFFFFF) or very faint gray (#FAFAFA).
+
+DESIGN:
+- Data presented in clean cards with NO borders and NO shadows — separated by white space alone
+- Large bold numbers in accent color (blue #0066CC or teal #00A99D), 48-64pt
+- Labels in dark gray (#444444), 14-16pt
+- Simple flat icons in medium gray (#888888) for categories
+- Bar charts or progress bars in accent color with gray (#E0E0E0) track
+- Generous padding between all elements — nothing feels cramped
+- If using a table: minimal hairline rules, alternating faint row shading (#F5F5F5)
+
+TYPOGRAPHY: Sans-serif. Dark for text, accent color for key numbers only.
+
+CRITICAL: Extreme clarity. Every data point is instantly readable. No decoration for decoration's sake. The data IS the design.
+"""
+
+[variants.footer]
+prompt = """
+Create an infographic footer section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: Pure white (#FFFFFF).
+
+DESIGN:
+- Sources and methodology notes in small gray (#999999) sans-serif, 9-10pt
+- Single thin line (#E0E0E0) at top
+- Minimal and unobtrusive
+
+TYPOGRAPHY: Small, light weight, gray.
+"""

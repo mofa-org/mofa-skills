@@ -1,0 +1,16 @@
+{
+  "api_keys": {
+    "gemini": "env:GEMINI_API_KEY",
+    "dashscope": "env:DASHSCOPE_API_KEY"
+  },
+  "defaults": {
+    "slides": { "style": "nb-pro", "image_size": "2K", "concurrency": 5, "auto_layout": true },
+    "cards": { "style": "cny-guochao", "aspect_ratio": "9:16", "image_size": "2K" },
+    "video": { "anim_style": "shuimo", "bgm": "chinese" },
+    "comic": { "style": "xkcd", "panels": 3, "refine_with_qwen": false },
+    "infographic": { "style": "cyberpunk-neon", "panels": 3, "refine_with_qwen": true }
+  },
+  "gen_model": "gemini-3-pro-image-preview",
+  "vision_model": "gemini-2.5-flash",
+  "edit_model": "qwen-image-edit-max-2026-01-16"
+}

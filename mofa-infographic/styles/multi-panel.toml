@@ -1,0 +1,62 @@
+[meta]
+name = "multi-panel"
+display_name = "Multi-Panel"
+description = "Bold color blocks, distinct section colors, comparison-friendly layout"
+category = "comparison"
+tags = ["colorful", "bold", "comparison", "sections"]
+
+[variants]
+default = "normal"
+
+[variants.header]
+prompt = """
+Create an infographic header section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: Bold color block — deep purple (#2D1B69) or dark navy (#1A2744) as solid fill.
+
+DESIGN:
+- Large white (#FFFFFF) title text, bold sans-serif, 48-64pt
+- Subtitle in light purple (#C4B5E8) or light blue (#A8C8E8), 20-24pt
+- A thin colored accent strip at the bottom edge in warm accent color (coral #FF6B6B or amber #FFB347)
+- Simple geometric decoration: thin white lines or dot pattern at 10% opacity
+- Clean and bold — this sets the color tone for the entire infographic
+
+TYPOGRAPHY: Bold sans-serif (Inter, Manrope). White text on dark background.
+
+ATMOSPHERE: Conference keynote slide — bold, confident, modern.
+"""
+
+[variants.normal]
+prompt = """
+Create an infographic content section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: This section uses a DISTINCT color block from the palette below. Each section should use a DIFFERENT background color for visual separation:
+- Section colors: soft coral (#FFE5E5), pale mint (#E5F5F0), soft lavender (#F0E8F5), pale amber (#FFF5E0), light blue (#E8F0FF)
+- The background is a soft pastel tint — NOT white, NOT dark
+
+DESIGN:
+- Content cards on white (#FFFFFF) with subtle shadow and rounded corners (12px)
+- Each card: bold stat number (36-48pt) in dark color matching the section's palette + label below
+- Icons in the section's accent color (darker shade of the background)
+- 2-4 cards arranged in a clean row or grid
+- Section heading at top in dark charcoal (#1A1A1A), bold, 24-28pt
+
+TYPOGRAPHY: Sans-serif throughout. Dark text on light backgrounds.
+
+CRITICAL: Each section is instantly distinguishable by its color. The color blocks create visual rhythm when sections are stacked vertically.
+"""
+
+[variants.footer]
+prompt = """
+Create an infographic footer section. 1920x1080 pixels, 16:9 landscape.
+
+BACKGROUND: Medium gray (#F0F0F0) or return to the header's dark color (#2D1B69).
+
+DESIGN:
+- If dark: white text for sources and credits, small size (10-12pt)
+- If light: dark gray (#666666) text, small size
+- Thin colored accent line at top matching the header's accent color
+- Clean, conclusive feel — wraps up the visual story
+
+TYPOGRAPHY: Small, clean, matching the header's style.
+"""

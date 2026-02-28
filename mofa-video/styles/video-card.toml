@@ -1,0 +1,37 @@
+[meta]
+name = "video-card"
+display_name = "Video Card"
+description = "Animation prompt templates for Gemini Veo image-to-video, 4 animation styles"
+category = "animation"
+tags = ["video", "animation", "Chinese"]
+
+[variants]
+default = "shuimo"
+
+[variants.shuimo]
+prompt = """
+Gentle animation of a Chinese ink wash painting. Subtle natural movements: leaves swaying gently in the breeze, steam rising slowly from tea cups, clouds drifting lazily across the sky, water rippling softly. Keep the ink wash painting style throughout — do NOT change the art style. Slow, peaceful, meditative motion. Camera stays still.
+"""
+
+[variants.festive]
+prompt = """
+Festive animation of a Chinese painting. Cheerful subtle movements: lanterns swaying gently, firecrackers sparkling, plum blossoms fluttering down, steam rising from food, people gesturing warmly. Keep the original art style throughout — do NOT change to photorealistic. Lively but not chaotic motion. Camera stays still.
+"""
+
+[variants.gentle]
+prompt = """
+Gentle, dreamy animation. Very subtle movements: hair and clothes swaying slightly in a soft breeze, petals drifting slowly, light flickering gently, soft particle effects like dust motes in sunlight. Keep the original art style throughout. Extremely slow, calming motion. Camera stays still.
+"""
+
+[variants.dynamic]
+prompt = """
+Lively animation of a painting scene. Noticeable movements: characters gesturing and interacting, animals moving naturally, water flowing, wind blowing through trees, birds flying in the background. Keep the original art style throughout — do NOT change to photorealistic. Moderate pace, energetic but graceful. Camera stays still.
+"""
+
+[compositing]
+still_duration = 2
+crossfade_dur = 1
+fade_out_dur = 1.5
+music_volume = 0.3
+music_fade_in = 2
+default_bgm = "bgm-cny.mp3"

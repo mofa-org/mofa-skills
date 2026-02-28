@@ -1,0 +1,87 @@
+[meta]
+name = "feng-zikai"
+display_name = "Feng Zikai 丰子恺"
+description = "Ink-wash illustration, minimal brush strokes, round-headed children, warm"
+category = "art"
+tags = ["ink-wash", "Chinese", "tea", "warm"]
+
+[variants]
+default = "content"
+
+[variants.scene]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+ART STYLE (CRITICAL — this is the MOST important instruction):
+Feng Zikai (丰子恺) painting style. This is a SPECIFIC Chinese art tradition:
+- Very simple, minimal brush strokes — just a few lines to suggest a figure
+- Round-headed children with dot eyes and no detailed facial features
+- Adults drawn with slightly more detail but still extremely minimal
+- Light color washes: pale pink, soft amber, gentle green, muted blue — like watercolor thinned to 20-30% opacity
+- Black or dark brown ink outlines, confident single brush strokes, never sketchy or tentative
+- LOTS of empty white/cream space (留白) — at least 40% of the image should be blank
+- Compositions feel like a page from a children's picture book or a scroll painting
+- Warm, nostalgic, innocent, gentle — capturing everyday family moments
+- Often includes a short line of calligraphic Chinese text as part of the painting (NOT separate)
+- Objects are simplified to their essence: a teapot is just a round body + spout + handle in 3 strokes
+- Mountains are 2-3 ink wash strokes suggesting misty peaks
+- Tea bushes are simple curved lines with a few leaf shapes
+- NO photorealism, NO digital art, NO detailed rendering — this must look HAND-PAINTED with brush and ink on rice paper
+
+BACKGROUND: Warm off-white (#FFF8F0), like aged Chinese rice paper. Subtle paper texture. NO gradients, NO patterns.
+
+TYPOGRAPHY: Noto Serif SC for any text overlays. ALL TEXT IN CHINESE ONLY. NO English anywhere.
+- Title text: 700 weight, warm charcoal #3C3226
+- Body text: 300 weight, warm gray #6B5E50
+- Text should feel like handwritten annotations on a painting, not corporate text boxes
+
+CRITICAL: This must look like an actual Feng Zikai painting — minimal, warm, with the naive charm of a master who draws with deliberate simplicity. Think of it as a painting first, a slide second.
+"""
+
+[variants.content]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+ART STYLE (CRITICAL):
+Feng Zikai (丰子恺) painting style applied to an informational layout:
+- Small ink-wash illustrations as accent elements (NOT the main focus)
+- Simple brush-stroke icons: teapot, cup, child figure, steam wisps, tea leaves, mountain silhouette
+- Light color wash backgrounds for content areas: very pale amber (#FFF5E8), pale green (#F0F7ED), soft pink (#FFF0F0), pale blue (#F0F5FF)
+- All illustrations are Feng Zikai style: minimal lines, round-headed figures, simplified objects
+- Hand-painted feel throughout — even dividers and borders should look like single brush strokes, not clean geometric lines
+
+BACKGROUND: Warm off-white (#FFF8F0), rice paper texture. Clean, airy.
+
+TYPOGRAPHY: Noto Serif SC for headers, Noto Sans SC for body. ALL TEXT IN CHINESE ONLY. NO English anywhere.
+- Section headers: 700 weight, 24-28pt, warm charcoal #3C3226
+- Body: 300 weight, 16-18pt, warm gray #5D4E37
+- Accent text/stats: 700 weight, soft ink black #2C2C2C or amber #B8860B
+- Key quotes in calligraphic style, integrated with illustrations
+
+LAYOUT: Generous whitespace. Content areas use very subtle pale color washes instead of hard-edged cards. NO corporate card borders — instead, group content with color washes and brush-stroke dividers. Each content area should breathe.
+
+CRITICAL: This is NOT a corporate slide. It should feel like an illustrated page from a warm family guidebook, with Feng Zikai's gentle hand visible in every element.
+"""
+
+[variants.emotion]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+ART STYLE (CRITICAL):
+Feng Zikai (丰子恺) painting at its most poetic and minimal:
+- ONE central illustration, very simple, occupying about 30-40% of the space
+- Surrounding empty space is PART of the composition — it conveys tranquility
+- The illustration captures a single warm moment: a hand pouring tea, a child looking up, steam rising, a mountain path
+- Light, almost transparent color wash — just a hint of amber or pink
+- One or two lines of calligraphic text integrated INTO the painting composition
+- This should feel like the most beautiful page in a Feng Zikai art book
+
+BACKGROUND: Warm cream (#FFFAF2), pristine, like high-quality rice paper.
+
+TYPOGRAPHY: Noto Serif SC, integrated with the painting. ALL TEXT IN CHINESE ONLY. NO English anywhere.
+- Quote text: 700 weight, 28-36pt, warm charcoal #3C3226
+- Attribution/subtitle: 300 weight, 16pt, warm gray #8B7D6B
+
+CRITICAL: Extreme minimalism. Every brush stroke must earn its place. This is meditation in visual form.
+"""
+

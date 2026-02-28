@@ -1,0 +1,76 @@
+[meta]
+name = "shuimo"
+display_name = "Shuimo 水墨"
+description = "Traditional ink-wash slides, rice paper, red accents, Chinese painting grace"
+category = "art"
+tags = ["ink-wash", "Chinese", "traditional"]
+
+[variants]
+default = "normal"
+
+[variants.cover]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+BACKGROUND: Warm rice paper texture (#FFF8F0 to #FFFAF2). Subtle Xuan paper grain visible. The off-white warmth of aged rice paper. NOT pure white — organic, handmade, warm.
+
+ILLUSTRATION STYLE — 水墨画 (Chinese Ink-Wash):
+- A bold ink-wash illustration occupies the RIGHT 50-60% of the slide: mountains in mist, bamboo grove, plum branches, or flowing water — rendered in traditional Chinese ink technique with varying gray tones and confident brush strokes.
+- RED (#CC2936) used as ONE accent: a single red seal stamp, plum blossom petals, or a small red lantern. Never more than 10% of visual area.
+- The LEFT side is mostly empty rice paper with the title text.
+- 30-40% of the slide should be 留白 (empty space). The emptiness IS the design.
+
+TYPOGRAPHY: Noto Serif SC for ALL text. ALL TEXT IN CHINESE ONLY.
+- Main title: font-weight 700, pure black ink (#1A1A1A), 48-56pt, left-aligned, positioned in the left 40%.
+- Subtitle: font-weight 300, warm gray (#666666), 22-26pt, below title with generous spacing.
+- A small red seal stamp (印章) near the title — a square red mark, traditional touch.
+
+CRITICAL: This must feel like the cover page of a hand-bound Chinese art book — refined, spacious, culturally elegant. The ink illustration and the emptiness create balance. Wu Guanzhong's landscape simplicity meets modern presentation design.
+"""
+
+[variants.normal]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+BACKGROUND: Warm rice paper (#FFF8F0). Subtle paper grain texture. Clean, warm, organic.
+
+ILLUSTRATION STYLE — 水墨画 (Chinese Ink-Wash):
+- Small ink-wash accent illustrations as decorative elements — NOT the main focus. Examples: a spray of bamboo leaves in a corner, a single plum branch along one edge, a few ink-wash mountain silhouettes at the bottom, or wisps of ink-wash clouds.
+- Illustrations occupy only 15-25% of the slide — they support the content, not compete.
+- RED (#CC2936) used sparingly: a plum petal, a seal stamp, or a thin accent line. Maximum 5-8% of visual area.
+- Brush strokes: confident, varying thickness, traditional Chinese painting technique.
+
+TYPOGRAPHY: Noto Serif SC for titles, Noto Sans SC for body. ALL TEXT IN CHINESE ONLY.
+- Title: font-weight 700, black ink (#1A1A1A), 28-32pt, left-aligned
+- Body text: font-weight 300, dark charcoal (#333333), 16-18pt, generous line spacing
+- Secondary text: font-weight 300, warm gray (#888888), 14pt
+- Key numbers or highlights: font-weight 700, RED (#CC2936), large
+- Use very subtle pale warm washes (#FFF5E8, #F5F0EB) to group content areas — NO hard borders, NO card shadows
+
+LAYOUT: Generous whitespace throughout. Content breathes. At least 80px margins. Group content with subtle wash backgrounds or single ink-brush divider strokes instead of geometric lines.
+
+CRITICAL: This is NOT a corporate slide. It should feel like an elegant page from a Chinese art studio's handbook — information presented with ink-wash grace. Every element earns its place.
+"""
+
+[variants.data]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+BACKGROUND: Warm rice paper (#FFF8F0). Clean, warm.
+
+ILLUSTRATION STYLE — 水墨画 (Chinese Ink-Wash):
+- Minimal ink decoration: just a faint bamboo leaf spray or mountain silhouette in one corner, very light gray (20-30% opacity). Decoration must NOT interfere with code or data readability.
+- RED (#CC2936) for emphasis only: key parameter names, important values.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY for labels and descriptions.
+- Title: Noto Serif SC, font-weight 700, black (#1A1A1A), 28-32pt
+- Code/API text: monospace feel (clear, readable), dark charcoal (#333333), 14-16pt
+- Use a very subtle warm background wash (#F5F0EB or #FFF5E8) for code blocks — like ink on slightly different paper. NO hard borders.
+- Parameter names in bold or RED (#CC2936) for emphasis
+- Comments/descriptions in warm gray (#888888)
+
+LAYOUT: Clean and readable. Code blocks with generous padding and line spacing. Left-aligned. If showing a table or parameter list, use thin ink-brush-style dividers (#DDD5C8), not geometric grid lines.
+
+CRITICAL: Data clarity is paramount, but maintain the ink-wash warmth. Think: a coding manual printed on handmade paper.
+"""
+

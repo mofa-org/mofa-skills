@@ -1,0 +1,94 @@
+[meta]
+name = "xianer"
+display_name = "Xian Er 贤二漫画"
+description = "Cute little monk character, modern cartoon, warm and healing Buddhist style"
+category = "character"
+tags = ["cartoon", "Chinese", "Buddhist", "cute"]
+
+[variants]
+default = "front"
+
+[variants.front]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a greeting card in the style of "贤二漫画" (Xian Er Comics) — the beloved little monk character from Beijing Longquan Temple. This is a SPECIFIC cartoon style — read carefully:
+
+BACKGROUND: Soft warm gradient — pale cream (#FFF9F0) to very light warm peach (#FFF0E6), or soft sky blue (#EBF4FA) to cream. Gentle, clean, NOT harsh. Can include very subtle cloud shapes or soft light rays. NO heavy textures.
+
+CHARACTER DESIGN — 贤二 (Xian Er the Little Monk):
+- A small, round, CUTE little Buddhist monk (小沙弥). This is a MODERN CARTOON character, NOT traditional ink-wash painting.
+- Round bald head, smooth and clean. Large expressive eyes (big, round, shiny, anime-influenced). Small nose, gentle smile or curious expression. Rosy cheeks.
+- Wearing simple Buddhist robes (僧袍) in warm earth tones: ochre yellow (#C49A3C), warm brown (#8B6914), or soft saffron. The robes are simple and slightly oversized, making the character look smaller and cuter.
+- The monk's body proportions are "chibi" style: large head (about 1/3 of body height), small body, short limbs. Round and soft overall.
+- The character should have PERSONALITY — showing emotion through pose and expression: bowing respectfully, hands clasped in prayer (合十), smiling warmly, looking up with wonder, or walking peacefully.
+- Drawing style: CLEAN vector-like lines, smooth coloring, soft shadows. Think: modern Chinese cartoon illustration, NOT rough brush strokes. Polished and professional.
+
+SCENE ELEMENTS:
+- Simple, warm environment: soft clouds, gentle sunlight, a few flowers or leaves, maybe a small temple roof silhouette in the background.
+- For New Year: red lanterns (simple, cute style), plum blossoms, a "福" character, red envelopes — all drawn in the same clean cartoon style.
+- Colors are WARM and SOFT: golden yellows, gentle reds (#D4534A, not aggressive), soft greens, warm browns. Nothing harsh or neon.
+- Gentle light effects: soft glow around lanterns, warm sunbeams, subtle sparkles.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- Text in clean, rounded Chinese font (think: 圆体 or 可爱体) — warm, approachable, slightly playful but not childish.
+- Text color: warm dark brown (#4A3728) or charcoal (#333333). NOT pure black.
+- Short, wise, warm phrases — the voice of 贤二 is innocent but insightful.
+- Text placed cleanly below, above, or beside the character.
+
+COMPOSITION: The little monk is the focal point, usually in the lower 2/3 of the card. Upper area for sky/atmosphere and text. Clean, uncluttered, lots of breathing room.
+
+CRITICAL: This must feel like an official 贤二漫画 illustration — polished, warm, CUTE but not saccharine, with a quiet depth beneath the simplicity. The little monk radiates gentle kindness. Modern digital illustration style, NOT traditional painting.
+"""
+
+[variants.greeting]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a TEXT-FOCUSED greeting card in 贤二漫画 (Xian Er) style.
+
+BACKGROUND: Soft warm cream (#FFF9F0) or very pale golden (#FFFBF0). Clean and gentle. Can have very subtle warm bokeh circles or soft cloud shapes at 10% opacity.
+
+CHARACTER — 贤二:
+- A SMALL illustration of the little monk, occupying only 20-30% of the card.
+- Positioned at top or bottom. The monk could be: sitting peacefully, bowing with hands clasped (合十), holding a small red lantern, or standing beside a flowering branch.
+- Same style: round head, big eyes, earth-tone robes, clean cartoon lines. CUTE and warm.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- The greeting text is the MAIN FOCUS, large and prominent.
+- Clean rounded Chinese font, warm brown (#4A3728) color.
+- Main message: large, 36-48pt equivalent, centered.
+- Secondary text: smaller, warm gray (#888888), below main message.
+- The text should read like 贤二 speaking — simple, warm, wise. NOT formal, NOT classical Chinese. Modern and heartfelt.
+- Keep text to 2-6 short lines maximum. Less is more.
+
+COMPOSITION: Text-centered design. Small monk illustration as accent. Generous warm empty space. Everything feels balanced, calm, and purposeful.
+
+CRITICAL: The warmth comes from the words and the little monk's presence. Simple, clean, modern. Like receiving a WeChat sticker that makes you smile and feel peaceful.
+"""
+
+[variants.scene]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a SCENIC greeting card featuring 贤二 (Xian Er the little monk) in a festive environment.
+
+BACKGROUND: The scene fills the card. Warm, inviting color palette.
+
+CHARACTER & SCENE — 贤二 in a story moment:
+- The little monk (round head, big eyes, earth-tone robes, chibi proportions) is in a complete scene that tells a small story.
+- Possible scenes: the little monk sweeping the temple courtyard surrounded by red lanterns and falling plum petals; sitting on temple steps watching fireworks bloom in a starry sky; walking a snowy path carrying a small red lantern, temple gate visible ahead; standing in a field of flowers, arms spread, face tilted up to sunlight; sharing tea with his master (an older, taller monk with kind eyes).
+- Scene style: modern cartoon illustration with warm lighting. Clean lines, smooth gradients, soft shadows. Think: a frame from a beautiful Chinese animated film.
+- Color palette: warm golds, gentle reds, soft greens, creamy whites, night blues (for evening scenes). Everything feels WARM even if the scene is snowy.
+- Atmospheric effects: firefly-like sparkles, soft lantern glow, gentle snowfall, floating petals. Magical but subtle.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- Minimal text: 2-4 characters or a single short line, integrated naturally.
+- Could be on a lantern, a banner in the scene, or a small inscription in a corner.
+- Clean, warm font style matching the illustration.
+
+COMPOSITION: Full scene with depth — foreground elements, the little monk in the middle, atmospheric background. The monk is small but draws the eye. The scene creates emotion through environment and color.
+
+CRITICAL: This should feel like a beautiful frame from a 贤二 animated short film — cinematic yet intimate, festive yet peaceful. The kind of image that makes you feel warm and quiet inside.
+"""
+

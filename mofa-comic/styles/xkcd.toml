@@ -1,0 +1,36 @@
+[meta]
+name = "xkcd"
+display_name = "XKCD / Stick Figure"
+description = "Hand-drawn stick figures, simple lines, nerdy humor, whiteboard aesthetic"
+category = "humor"
+tags = ["tech", "humor", "minimal", "stick-figure"]
+
+[variants]
+default = "panel"
+
+[variants.panel]
+prompt = """
+Create a single comic panel image in XKCD style.
+
+DRAWING STYLE:
+- Simple stick figure characters with round heads (circle), stick body, stick arms and legs
+- Hand-drawn wobbly lines — NOT clean vector art. Think: someone drawing on a whiteboard with a marker
+- Black lines on pure white (#FFFFFF) background
+- No color except occasional minimal highlights (red for emphasis, blue for screens)
+- Speech bubbles with hand-drawn rounded rectangle borders
+- Simple facial expressions: dots for eyes, simple curved line for mouth
+- Minimal backgrounds: a desk is just a horizontal line, a computer is a rectangle
+
+TYPOGRAPHY:
+- Text in a casual handwritten sans-serif font (like xkcd's Humor Sans)
+- Speech bubble text in black, 14-18pt equivalent
+- Title/caption text below the panel in smaller size
+
+COMPOSITION:
+- Clean, uncluttered, plenty of white space
+- Characters positioned simply — standing, sitting at a desk, talking to each other
+- No shading, no gradients, no textures — pure line art
+- Panel has a thin black border (1-2px)
+
+CRITICAL: This must look like an actual xkcd comic — deceptively simple, hand-drawn quality, with the humor coming from the situation and dialogue, not from visual complexity.
+"""

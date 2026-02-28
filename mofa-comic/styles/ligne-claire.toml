@@ -1,0 +1,40 @@
+[meta]
+name = "ligne-claire"
+display_name = "Ligne Claire"
+description = "Clean uniform lines, flat colors, Tintin/Herge style, European comic tradition"
+category = "classic"
+tags = ["European", "Tintin", "clean", "adventure"]
+
+[variants]
+default = "panel"
+
+[variants.panel]
+prompt = """
+Create a single comic panel image in Ligne Claire (clear line) style.
+
+DRAWING STYLE:
+- Uniform line weight throughout — every outline is the same thickness (~1.5-2px), no variation
+- Clean, precise lines with no sketchy quality — technical precision
+- Flat color fills with NO shading, NO gradients, NO highlights
+- Colors are bright but not neon: primary red, blue, yellow, clean green, warm brown
+- No hatching, no screentones, no textures — pure flat color areas bounded by clean lines
+- This is the style of Herge (Tintin), Edgar P. Jacobs, and Joost Swarte
+
+CHARACTER DESIGN:
+- Semi-realistic proportions (not chibi, not exaggerated)
+- Simple but recognizable faces: dot eyes or simple oval eyes, clear nose line, simple mouth
+- Clothing has clean folds drawn with uniform lines
+- Characters are expressive through pose and gesture, not through exaggerated facial features
+
+BACKGROUNDS:
+- Detailed, architecturally accurate backgrounds with the same uniform line weight
+- Buildings, streets, interiors drawn with careful perspective
+- Every object outlined with the same consistent line — no variation in thickness
+
+TYPOGRAPHY:
+- Clean sans-serif font in speech bubbles
+- Oval speech bubbles with clean thin borders
+- Sound effects in bold block letters
+
+CRITICAL: The hallmark of Ligne Claire is the democratic line — every element (character, background, object) drawn with equal precision and identical line weight. No line is more important than another. Flat colors, no shadows.
+"""

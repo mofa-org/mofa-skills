@@ -1,0 +1,94 @@
+[meta]
+name = "cny-shuimo"
+display_name = "CNY Shuimo 水墨"
+description = "Chinese New Year ink-wash style, rice paper, refined calligraphy"
+category = "festive"
+tags = ["CNY", "ink-wash", "elegant", "Chinese"]
+
+[variants]
+default = "front"
+
+[variants.front]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a GREETING CARD, not a presentation slide. The entire image is one cohesive piece of art — a single vertical composition in traditional Chinese ink-wash (水墨) style.
+
+BACKGROUND: Warm rice paper texture (#FFF8F0 to #FFFAF2). Subtle paper grain visible. The off-white warmth of aged Xuan paper (宣纸). NOT pure white — it should feel organic, handmade, warm.
+
+ILLUSTRATION STYLE — 水墨画 (Chinese Ink-Wash Painting):
+- Traditional Chinese ink-wash painting technique. Brush strokes in black/dark gray ink with varying opacity and wetness.
+- Minimal, confident brush strokes — each stroke intentional, no excess.
+- Key motifs for New Year: plum blossoms (梅花) in ink with RED (#CC2936) petals as the ONE color accent; bamboo (竹); a single red lantern (红灯笼) rendered in ink outline with red fill; koi fish (锦鲤) in ink with subtle gold; pine branches (松枝) symbolizing longevity.
+- Choose ONE primary motif. Do not overcrowd. Less is more.
+- 40-50% of the card should be EMPTY — 留白 (negative space) IS the design. The emptiness creates breath, elegance, and poetic mood.
+- RED (#CC2936) used ONLY as accent — plum petals, a lantern, a seal stamp. Never more than 15% of visual area.
+- Gold (#D4AF37) used extremely sparingly — perhaps a single thin line or tiny accent. 5% maximum.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- Main greeting: 2-4 characters in elegant Chinese calligraphy (书法), black ink, 64-80pt equivalent. Examples: "新春", "迎春", "恭贺新禧".
+- The calligraphy should look HAND-BRUSHED — varying stroke thickness, natural ink flow, connected energy.
+- A small red seal stamp (印章) beside the calligraphy — a square red mark with 1-2 white characters inside.
+- Place text in harmony with the illustration and empty space. Often upper-left or right following traditional Chinese painting composition.
+
+COMPOSITION: Follows traditional Chinese vertical scroll (立轴) composition. Main motif at center or slightly off-center. Text in a corner or along one edge. Generous empty space creating visual poetry.
+
+CRITICAL: This must feel like receiving a hand-painted greeting from a Chinese calligrapher — refined, meditative, culturally profound. The restraint IS the luxury. Every element earns its place. Qi Baishi meets modern minimalism.
+"""
+
+[variants.greeting]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a GREETING CARD for Chinese New Year. Ink-wash style with emphasis on BLESSING TEXT in beautiful calligraphy.
+
+BACKGROUND: Warm rice paper (#FFF8F0). Subtle Xuan paper texture. Clean, warm, organic.
+
+ILLUSTRATION STYLE — 水墨画 (Chinese Ink-Wash):
+- Delicate ink-wash decorative elements as frame and accent: bamboo leaves along one edge, a spray of plum blossoms in a corner, ink-wash clouds or mountain silhouettes at the base.
+- Illustration occupies 25-35% of the card — supporting the calligraphy, not competing.
+- Brush strokes: confident, varying thickness, traditional Chinese painting technique.
+- RED (#CC2936) accent: plum blossoms, small lantern detail, or thin decorative line. Restrained.
+- 40%+ empty rice paper space. The emptiness is essential.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- Main greeting: 4-8 characters in beautiful Chinese calligraphy (行书 or 楷书 style), black ink, large and prominent. 56-72pt equivalent.
+- Secondary blessing: 2-3 lines of smaller elegant text (20-28pt), dark gray (#333333), balanced and spacious.
+- Example layout:
+  "恭贺新禧" (large calligraphy, black ink, prominent)
+  "万事如意" (medium, slightly lighter)
+  "岁岁平安 年年有余" (smaller, gray, with breathing room)
+- A red seal stamp (印章) placed traditionally — lower-right of the calligraphy block.
+- Text should feel like a hand-written letter — NOT typeset. Organic placement, natural flow.
+
+COMPOSITION: Calligraphy is the soul of this card. Center it vertically with ample breathing room above and below. Ink-wash decorations create a gentle frame — branches, leaves, or clouds — without enclosing the text rigidly.
+
+CRITICAL: The beauty is in the calligraphy and the emptiness around it. This should feel like opening a hand-brushed letter from a beloved elder — warm, graceful, and deeply personal.
+"""
+
+[variants.scene]
+prompt = """
+Create a greeting card image. 1080x1920 pixels, 9:16 PORTRAIT format (taller than wide).
+
+This is a SCENIC greeting card for Chinese New Year — a contemplative ink-wash landscape that evokes the warmth and poetry of the season.
+
+BACKGROUND: The ink-wash scene itself fills the card, with warm rice paper (#FFF8F0, #FFFAF2) showing through in areas of 留白 (empty space).
+
+ILLUSTRATION STYLE — 水墨画 (Chinese Ink-Wash Painting):
+- A vertical landscape scene rendered in traditional Chinese ink-wash technique.
+- Possible scenes: a snowy mountain village at dusk with a few red lanterns glowing warmly between traditional houses; a solitary plum tree in full bloom (red petals) against misty mountains; a quiet riverside town with stone bridges, tiled roofs, and red spring couplets on doors; a moonlit garden with bamboo, a stone path, and one glowing paper lantern.
+- Ink technique: wet ink washes for mountains and sky (varying gray tones), dry brush for tree bark and architectural details, splattered ink for snow or blossoms.
+- RED (#CC2936) used as the WARM ACCENT against the monochrome ink — lanterns glowing, plum petals, spring couplets on doors, a figure's scarf. The red creates focal points of warmth in the ink landscape.
+- Gold (#D4AF37) extremely subtle — perhaps moonlight reflection or a faint glow around lanterns.
+- 30-40% empty space (留白) — mist, sky, snow, or water rendered as bare paper. The emptiness creates depth and atmosphere.
+
+TYPOGRAPHY: ALL TEXT IN CHINESE ONLY.
+- Minimal: 2-4 characters integrated poetically into the scene. "新春" written as if on a banner in the village, or "福" on a door within the scene, or a small line of poetry (七言) in the upper corner like a traditional painting inscription.
+- Calligraphic style, black ink, as if inscribed by the painter.
+- A small red seal stamp in a corner.
+
+COMPOSITION: Traditional Chinese landscape composition (山水画) adapted to vertical card format. Distance through atmospheric perspective — foreground details fade into misty middle ground, then ethereal background. The scene draws the viewer IN, creating a sense of peaceful depth.
+
+CRITICAL: This should feel like a modern master's Chinese New Year painting — poetic, atmospheric, emotionally warm despite the ink restraint. The kind of card that makes the recipient pause and feel something. Wu Guanzhong's simplicity, Qi Baishi's boldness, with the warmth of Chinese New Year.
+"""
+

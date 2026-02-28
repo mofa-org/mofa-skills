@@ -1,0 +1,46 @@
+[meta]
+name = "graphic-novel"
+display_name = "Graphic Novel"
+description = "Dark, atmospheric, detailed illustration, serious narrative tone"
+category = "narrative"
+tags = ["dark", "atmospheric", "detailed", "narrative"]
+
+[variants]
+default = "panel"
+
+[variants.panel]
+prompt = """
+Create a single graphic novel panel image.
+
+DRAWING STYLE:
+- Detailed, atmospheric illustration with rich tonal range
+- Heavy use of shadow and contrast — deep blacks, dramatic lighting
+- Ink wash or digital painting technique with visible texture and depth
+- Muted, desaturated color palette: dark blues (#1A2B3C), deep reds (#6B2020), slate grays (#3A3A4A), muted greens (#2D4A2D), warm ambers (#8B6914)
+- Color is used sparingly and deliberately — most of the image is in dark tones with selective color highlights
+- Detailed cross-hatching and ink work for textures and shadows
+
+CHARACTER DESIGN:
+- Realistic proportions, detailed anatomy
+- Faces with nuanced expressions — subtle emotions, not exaggerated
+- Detailed clothing textures: leather, fabric folds, worn materials
+- Characters feel lived-in, with visual storytelling through costume and posture
+
+BACKGROUNDS:
+- Richly detailed environments: cityscapes, interiors, landscapes
+- Strong atmospheric perspective — foreground sharp, background fading into shadow or mist
+- Dramatic lighting: streetlamps casting long shadows, moonlight through windows, neon reflections
+- Architecture and environments tell their own story
+
+TYPOGRAPHY:
+- Narrative caption boxes with serif font on parchment-colored or dark backgrounds
+- Speech bubbles with slightly rough, hand-lettered feel
+- Sound effects integrated into the art, not floating above it
+
+COMPOSITION:
+- Cinematic framing — establishing shots, close-ups, over-the-shoulder angles
+- Strong use of negative space and shadow for dramatic effect
+- Panels that could work as standalone illustrations
+
+CRITICAL: This is serious visual storytelling — the art carries emotional weight. Think: Frank Miller's Sin City, Mignola's Hellboy, or Lemire's Essex County. Every shadow is intentional, every composition tells a story.
+"""

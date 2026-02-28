@@ -1,0 +1,161 @@
+[meta]
+name = "lingnan"
+display_name = "Lingnan 岭南画派"
+description = "Lingnan painting school tea camp, ink-wash botanical, multi-day color themes"
+category = "art"
+tags = ["ink-wash", "Chinese", "tea", "Lingnan"]
+
+[variants]
+default = "info"
+
+[variants.cover]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+BACKGROUND: Traditional Chinese ink-wash painting (水墨画) style landscape. Misty mountains in layered silhouettes — from pale gray-blue at the back to deep indigo in the foreground. Phoenix Mountain (凤凰山) range with ancient tea terraces faintly visible on slopes. Morning mist rising between peaks. Subtle wash of warm golden light from one edge suggesting dawn.
+
+COLOR PALETTE:
+- Mountain ink: deep indigo #2C3E50 to pale blue-gray #B0C4D8
+- Mist: white to pale cream #FFFAF0 with 40-60% transparency
+- Tea garden accent: muted sage green #7D9B76
+- Dawn warmth: pale gold #F5DEB3 at 20% opacity
+- Text: warm charcoal #3C3226 on light areas, cream #FFFAF0 on dark areas
+
+TYPOGRAPHY: Noto Serif SC (elegant Chinese serif) for titles, Noto Sans SC for body. ALL TEXT IN CHINESE. English only for proper nouns.
+- Title: 700 weight, 44-52pt, warm charcoal or cream depending on background
+- Subtitle: 300 weight, 20-24pt
+
+ILLUSTRATION STYLE (CRITICAL):
+Lingnan painting school (岭南画派) aesthetic — the Chaoshan regional variant:
+- Traditional Chinese ink-wash brush strokes with wet-on-wet bleeding effects
+- Botanical elements: tea leaves, phoenix dancong tea bushes, orchids, mountain flora painted in classical Chinese brush style
+- Birds: occasionally a phoenix silhouette or mountain birds in ink
+- NOT Western watercolor. NOT digital vector art. This is TRADITIONAL CHINESE PAINTING with bold brushwork, splashed ink (泼墨), and the characteristic Lingnan "clash of water and powder" (撞水撞粉) technique
+- Generous empty space (留白) — the blank space IS part of the composition, like a classical Chinese painting scroll
+- Premium, contemplative, scholarly atmosphere
+"""
+
+[variants.day1]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+BACKGROUND: Soft warm parchment (#FDF6EC) with very faint ink-wash tea plant watermark at 5-8% opacity in the bottom-right corner. Subtle texture like aged rice paper (宣纸).
+
+COLOR PALETTE:
+- Background: warm parchment #FDF6EC
+- Primary accent: amber gold #C8973E (the color of dancong tea liquor)
+- Secondary: warm brown #8B6914
+- Card backgrounds: white #FFFFFF with very subtle warm shadow
+- Card borders: thin left border in amber gold #C8973E or tea brown #6B4226
+- Text title: deep warm brown #3C2415, 700 weight, 28-32pt
+- Text body: warm gray #5D4E37, 300 weight, 16-18pt
+- Stat numbers: amber gold #C8973E, 700 weight, 48-64pt
+
+TYPOGRAPHY: Noto Serif SC for titles (elegant, traditional), Noto Sans SC for body text. ALL TEXT IN CHINESE. English only for proper nouns.
+
+ILLUSTRATION STYLE (CRITICAL):
+Lingnan painting school (岭南画派) ink-wash illustrations in warm amber/brown tones:
+- Ink-wash brush stroke illustrations of: tea cups, tea leaves, aroma wisps, sensory organs, children exploring
+- Warm amber (#C8973E) and brown (#6B4226) ink lines — like painting with strong tea
+- Botanical sketches of Phoenix Dancong tea branches with leaves and buds in classical Chinese painting style
+- Loose, expressive brush strokes but CLEAN and READABLE
+- Cards are white with subtle warm shadow and thin tea-colored left border, rounded 12px
+- Generous whitespace — Apple Keynote level spacing with the contemplative emptiness of Chinese painting
+- Small decorative tea leaf or steam motifs as section dividers
+
+Premium consulting deck meets traditional Chinese aesthetic. McKinsey quality layout with Lingnan painting illustrations.
+"""
+
+[variants.day2]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+BACKGROUND: Soft sage (#F4F7F2) with very faint ink-wash mountain tea garden watermark at 5-8% opacity. Subtle rice paper texture.
+
+COLOR PALETTE:
+- Background: pale sage #F4F7F2
+- Primary accent: deep tea green #4A7C59
+- Secondary: forest green #2D5A3D
+- Warm accent: fired clay #A0522D (the color of charcoal-roasted tea)
+- Card backgrounds: white #FFFFFF with subtle green-tinted shadow
+- Card borders: thin left border in tea green #4A7C59
+- Text title: deep forest #1E3A2A, 700 weight, 28-32pt
+- Text body: muted green-gray #4A5D50, 300 weight, 16-18pt
+- Stat numbers: deep tea green #4A7C59, 700 weight, 48-64pt
+
+TYPOGRAPHY: Noto Serif SC for titles, Noto Sans SC for body. ALL TEXT IN CHINESE. English only for proper nouns.
+
+ILLUSTRATION STYLE (CRITICAL):
+Lingnan painting school ink-wash illustrations in green/earth tones:
+- Ink-wash brush stroke illustrations of: ancient tea trees, tea processing tools, mountain landscapes, artisan hands at work
+- Green (#4A7C59) and earth brown (#A0522D) ink lines — like painting with mountain spring water and charcoal
+- Classical Chinese painting of tea plants: Dancong varietal branches, thick trunks of ancient tea trees, terraced gardens
+- Hand-drawn quality with bold, confident Lingnan brushwork — NOT timid, NOT Western botanical illustration
+- Fire/roasting elements drawn with warm ember-like brush strokes in clay red
+- Cards white with subtle shadow and thin green left border, rounded 12px
+- Generous whitespace and Lingnan-style empty space (留白)
+
+Premium consulting aesthetic with deep green tea-garden Lingnan painting. Earthy, artisanal, heritage-rich.
+"""
+
+[variants.day3]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+BACKGROUND: Warm white (#FFFBF5) with very faint ink-wash phoenix or orchid watermark at 5-8% opacity. Delicate rice paper texture.
+
+COLOR PALETTE:
+- Background: warm white #FFFBF5
+- Primary accent: orchid pink #C1567D (Chaoshan embroidery color)
+- Secondary: deep plum #7B2D4E
+- Warm accent: golden amber #C8973E
+- Card backgrounds: white #FFFFFF with subtle warm shadow
+- Card borders: thin left border in orchid pink #C1567D or plum #7B2D4E
+- Text title: deep plum-brown #4A2035, 700 weight, 28-32pt
+- Text body: warm gray #5D4E55, 300 weight, 16-18pt
+- Stat numbers: orchid pink #C1567D, 700 weight, 48-64pt
+
+TYPOGRAPHY: Noto Serif SC for titles, Noto Sans SC for body. ALL TEXT IN CHINESE. English only for proper nouns.
+
+ILLUSTRATION STYLE (CRITICAL):
+Lingnan painting school ink-wash illustrations in pink/plum tones:
+- Ink-wash brush stroke illustrations of: gongfu tea ceremony, tea ware (gaiwan, fairness cup, tasting cups), orchids, creative activities
+- Orchid pink (#C1567D) and plum (#7B2D4E) ink lines — like painting with osmanthus and plum wine
+- Lingnan school is famous for painting flowers — use orchids, plum blossoms, and phoenix imagery
+- Elegant, celebratory brush strokes suggesting accomplishment and beauty
+- Cards white with subtle warm shadow and thin pink left border, rounded 12px
+- Generous whitespace
+
+Premium consulting aesthetic with Lingnan floral painting elegance. Celebratory, creative, refined.
+"""
+
+[variants.info]
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+BACKGROUND: Clean warm white (#FEFCF8) with very subtle rice paper texture. No watermark or very faint tea leaf motif at 3-5% opacity.
+
+COLOR PALETTE:
+- Background: warm white #FEFCF8
+- Primary: deep ink #2C2C2C
+- Day 1 color: amber gold #C8973E
+- Day 2 color: tea green #4A7C59
+- Day 3 color: orchid pink #C1567D
+- Card backgrounds: white #FFFFFF with subtle shadow
+- Text title: deep ink #2C2C2C, 700 weight, 28-32pt
+- Text body: warm gray #555555, 300 weight, 16-18pt
+
+TYPOGRAPHY: Noto Serif SC for titles, Noto Sans SC for body. ALL TEXT IN CHINESE. English only for proper nouns.
+
+ILLUSTRATION STYLE (CRITICAL):
+Clean consulting layout with subtle Lingnan painting accents:
+- Minimal ink-wash decorative elements — a brush stroke divider, a small tea branch corner ornament
+- Data-forward: clean tables, stat callouts, comparison grids
+- When illustrations appear, they are small refined ink-wash icons in gray or muted tones
+- Cards white with thin colored left borders (using the day's accent color), rounded 12px
+- Generous whitespace — Apple Keynote level
+- This style prioritizes READABILITY and DATA over artistic illustration
+
+Premium consulting aesthetic with understated Chinese painting touches. Clean, intellectual, authoritative.
+"""
+

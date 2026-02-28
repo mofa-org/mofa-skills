@@ -1,0 +1,38 @@
+[meta]
+name = "manga"
+display_name = "Manga"
+description = "Japanese manga style with screentones, dramatic angles, expressive characters"
+category = "narrative"
+tags = ["manga", "Japanese", "dramatic", "expressive"]
+
+[variants]
+default = "panel"
+
+[variants.panel]
+prompt = """
+Create a single manga-style comic panel image.
+
+DRAWING STYLE:
+- Japanese manga illustration with clean black ink lines on white
+- Dynamic character poses with expressive large eyes, detailed hair, varied line weights
+- Screentone patterns for shading (dot patterns, line hatching) — classic manga technique
+- Speed lines for action, emotion lines for surprise/shock, sparkle effects for beauty
+- Black and white ONLY — no color. Pure manga monochrome
+
+CHARACTER DESIGN:
+- Manga proportions: large expressive eyes, small nose and mouth, detailed hair
+- Emotional expressions are EXAGGERATED: sweat drops for nervousness, veins for anger, sparkles for admiration
+- Clothing has detailed folds and wrinkles rendered in ink
+
+BACKGROUNDS:
+- Detailed when present: buildings, rooms, landscapes with perspective lines
+- OR abstract: speed lines, screentone gradients, blank with sparkle effects
+- Manga-style panel gutters and bleed
+
+TYPOGRAPHY:
+- Japanese manga font style for speech bubbles (bold, slightly rounded)
+- Sound effects (onomatopoeia) as large dramatic text integrated into the art
+- Speech bubbles are oval/rounded with tail pointing to speaker
+
+CRITICAL: This must read as authentic manga — dynamic composition, dramatic angles (low angle, bird's eye, Dutch tilt), cinematic panel layout with varied shot sizes (close-up, medium, wide).
+"""

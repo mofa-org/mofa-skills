@@ -1,0 +1,45 @@
+[meta]
+name = "pop-art"
+display_name = "Pop Art"
+description = "Bold primary colors, Ben-Day dots, Lichtenstein/Warhol inspired, high impact"
+category = "artistic"
+tags = ["pop-art", "bold", "retro", "impactful"]
+
+[variants]
+default = "panel"
+
+[variants.panel]
+prompt = """
+Create a single comic panel image in Pop Art style (Roy Lichtenstein).
+
+DRAWING STYLE:
+- Bold black outlines (thick, 3-4px) with FLAT primary color fills
+- Ben-Day dots (halftone dot pattern) for shading and color gradients — this is THE signature element
+- Limited color palette: primary red (#FF0000), yellow (#FFD700), blue (#0066CC), black, white
+- High contrast, graphic, poster-like impact
+- No subtle shading — only Ben-Day dots at different densities for tonal variation
+
+CHARACTER DESIGN:
+- Idealized comic book characters: strong jawlines, dramatic expressions
+- Women with flowing hair, red lips, dramatic eye makeup (classic Lichtenstein woman)
+- Men with chiseled features, determined expressions
+- Emotions are DRAMATIC and EXAGGERATED — tears, surprise, anger, passion
+
+BACKGROUNDS:
+- Bold flat color or Ben-Day dot patterns
+- Simple geometric shapes or starburst patterns for emphasis
+- No detailed environments — the character and text ARE the composition
+
+TYPOGRAPHY:
+- Bold block letters in speech bubbles or thought balloons
+- Thought balloons with cloud-like borders
+- Dramatic text: "POW!", "WHAM!", "OH NO!" in large decorated letters
+- Text can be the main visual element
+
+COMPOSITION:
+- Close-up crops — face filling the panel, dramatic angles
+- High contrast between thick black outlines and bright colors
+- Every element pops with maximum visual impact
+
+CRITICAL: This must look like a Roy Lichtenstein painting — the Ben-Day dots are essential, the colors are primary and bold, the emotions are melodramatic. Commercial art elevated to fine art.
+"""
