@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: Apache-2.0
+
+// Website Review & Fix Pipeline
+// 2-step: audit → fix
+//
+// The user input MUST specify the site directory path (e.g. "site-bakery/").
+// Each node receives the user input as context and uses it to locate files.
+//
+// Tool contract:
+//   shell        — lists files, checks structure
+//   read_file    — reads all site files for review
+//   write_file   — rewrites files to fix issues
+
+digraph review_site {
+    graph [label="Website Review Pipeline", default_model="strong"]
+
+    audit [
+        prompt="You are a senior frontend engineer doing a thorough code review of a static website.\n\nThe user input tells you which directory to review AND what issues to look for. Extract the site directory path from the user input (e.g. 'site/', 'site-bakery/', '/path/to/mysite/').\n\nStep 1: Use shell to run: find <site-dir> -type f | sort\nStep 2: Use read_file to read EVERY file (HTML, CSS, JS).\nStep 3: Use shell to run: ls -la <site-dir>/images/ to see available images.\n\nPerform a THOROUGH audit. Pay special attention to issues the user mentioned. Also check for:\n- Missing pages (the site should have separate HTML pages, not just one page)\n- Broken internal links (href pointing to non-existent files)\n- CSS issues: missing styles for sections, poor spacing, no responsive design\n- JS issues: hamburger menu not working, missing event listeners\n- Images: are generated images actually referenced? Are paths correct?\n- HTML: missing meta tags, unclosed tags, poor semantics\n- Accessibility: missing alt text, no skip-to-content, poor contrast\n- Mobile: no hamburger menu, no media queries, text too small\n- Content: placeholder text like 'coming soon' or 'details available soon' instead of real content\n\nOutput a DETAILED bug report with the site directory path and every issue found, organized by severity (critical, major, minor).",
+        label="Audit",
+        tools="shell,read_file",
+        timeout_secs="120"
+    ]
+
+    fix [
+        prompt="You are a senior frontend developer. You have received a detailed bug report for a website. The bug report specifies the site directory path. Your job is to FIX EVERY ISSUE by rewriting files in that directory.\n\nIMPORTANT RULES:\n1. Use write_file for EACH file you fix. Write ONE file at a time.\n2. Do NOT output code as text — you MUST call write_file.\n3. If the site needs separate pages (schedule.html, speakers.html, etc.), CREATE them.\n4. Every page must have: proper nav with links to all pages, consistent footer, Google Fonts, responsive CSS.\n5. Use the GENERATED IMAGES from <site-dir>/images/ (files named card-*.png) as backgrounds and section images.\n6. Match the existing visual style of the site unless the user asked for changes.\n\nStart by fixing the CSS, then JS, then each HTML page.\n\nAfter fixing ALL files, use shell to run: find <site-dir> -type f | sort\nThen output a summary of every file modified and every issue fixed.",
+        label="Fix",
+        tools="write_file,read_file,shell",
+        goal_gate="true",
+        timeout_secs="900"
+    ]
+
+    audit -> fix
+}

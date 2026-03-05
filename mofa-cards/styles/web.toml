@@ -1,0 +1,56 @@
+[meta]
+name = "web"
+display_name = "Website Assets"
+description = "Clean, modern images for website hero banners, section backgrounds, and feature illustrations. No text in images — text is overlaid via HTML/CSS."
+category = "web"
+tags = ["website", "hero", "banner", "background", "modern"]
+
+[variants]
+default = "hero"
+
+[variants.hero]
+prompt = """
+Create a wide-format hero banner image for a modern website. 16:9 landscape orientation.
+
+CRITICAL RULES:
+- Do NOT include any text, words, letters, numbers, or typography in the image.
+- Do NOT include any UI elements, buttons, navigation bars, or browser chrome.
+- The image must work as a BACKGROUND — it will have text overlaid via HTML/CSS.
+- Use subtle, atmospheric compositions that leave visual space for overlay text (especially center area).
+
+STYLE: Cinematic, high-end, professional. Think premium corporate website or conference landing page.
+LIGHTING: Dramatic but not harsh. Soft gradients, volumetric light, subtle lens effects.
+QUALITY: Photorealistic digital art, sharp details, rich color depth.
+COMPOSITION: Wide panoramic feel. Subject slightly off-center or spread across the frame. Dark enough in center/top for white text readability.
+"""
+
+[variants.section]
+prompt = """
+Create a subtle background image for a website section. 16:9 landscape orientation.
+
+CRITICAL RULES:
+- Do NOT include any text, words, letters, numbers, or typography.
+- Do NOT include any UI elements.
+- This is a BACKGROUND — it must be subtle enough that overlaid text remains readable.
+- Use muted tones, gentle gradients, or soft atmospheric effects.
+
+STYLE: Minimal, elegant, understated. Abstract or environmental.
+LIGHTING: Soft, even, ambient. No harsh contrasts.
+QUALITY: Clean digital art with smooth gradients and subtle texture.
+COMPOSITION: Non-distracting. Gentle patterns, soft geometry, or out-of-focus environmental scenes. Darker regions where text will be placed.
+"""
+
+[variants.feature]
+prompt = """
+Create a feature illustration or photo for a website content section. 4:3 or 1:1 format.
+
+CRITICAL RULES:
+- Do NOT include any text, words, letters, numbers, or typography.
+- Do NOT include any UI elements.
+- This image will be displayed alongside text content, not as a background.
+
+STYLE: Clean, modern, professional. Photorealistic or polished digital art.
+LIGHTING: Well-lit, clear, inviting.
+QUALITY: Sharp, detailed, vibrant but not oversaturated.
+COMPOSITION: Clear subject with balanced composition. Works well at thumbnail and full size.
+"""

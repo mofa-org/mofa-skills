@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: Apache-2.0
+
+// Website Builder Pipeline
+// 5-step: research → plan → images → code → review
+//
+// User describes their website in plain language.
+// The pipeline researches, plans, generates images via mofa-cli, codes, and delivers a complete static site.
+//
+// Tool contract:
+//   deep_search  — multi-round web research for design inspiration (app-skill plugin)
+//   shell        — runs mofa cards for image generation, directory operations
+//   read_file    — reads search results and generated site files
+//   write_file   — writes HTML, CSS, JS, JSON, and deployment guide to disk
+
+digraph build_website {
+    graph [label="Website Builder Pipeline", default_model="strong"]
+
+    research [
+        prompt="You are a web design researcher. The user wants a website — your job is to find design inspiration and best practices for their specific type of site.\n\nUse deep_search with depth=1 to research design examples for this type of website (e.g. 'best conference website designs 2025 dark theme modern').\n\nAfter deep_search completes, use read_file to read the report file it produces.\n\nOutput a structured summary:\n- **Design inspiration**: 3-5 real examples with URLs and what makes them effective\n- **Required pages**: What pages this type of site needs (with reasoning)\n- **Key sections per page**: What content sections each page should have\n- **Style direction**: Recommended colors, fonts, layout style\n- **Must-have features**: Contact forms, maps, galleries, etc.\n\nBe specific — include real URLs, actual color hex codes, actual font names.",
+        label="Research",
+        model="cheap",
+        tools="deep_search,read_file",
+        timeout_secs="300"
+    ]
+
+    plan [
+        prompt="You are a website architect and copywriter. You have received design research about a website the user wants. Your job is to create a complete, detailed blueprint that a developer can implement exactly.\n\nProduce a DETAILED plan with these sections:\n\n## Site Structure\n- List every HTML file to create (index.html, about.html, etc.)\n- The site name / brand name (from user input)\n- Primary language (match the user's input language)\n\n## Style Guide\n- Primary color (hex), secondary color (hex), accent color (hex)\n- Background color, text color\n- Font family for headings (use Google Fonts)\n- Font family for body text\n- Overall feel: modern/classic/minimal/bold/playful\n\n## Image Generation Plan\nYou MUST output a valid JSON block for image generation. Output it as a fenced code block tagged ```json. This JSON array will be passed to mofa cards to generate images via the Gemini API.\n\nFormat — an array of objects, each with:\n- name: filename without extension (e.g. hero-banner, about-bg, feature-ai). The output file will be card-{name}.png\n- prompt: A detailed visual description. Describe scene, style, colors, mood, composition. Do NOT ask for text/words in the image — text is overlaid via HTML/CSS.\n- style: one of hero (wide dramatic banner), section (subtle background), or feature (standalone illustration)\n\nExample:\n```json\n[\n  {\"name\": \"hero-banner\", \"prompt\": \"Abstract futuristic cityscape at dusk with deep blue and gold lighting, neural network patterns in the sky, sleek glass buildings, cinematic wide composition\", \"style\": \"hero\"},\n  {\"name\": \"about-bg\", \"prompt\": \"Soft gradient of deep navy to dark teal, subtle geometric patterns, abstract data visualization dots\", \"style\": \"section\"},\n  {\"name\": \"speakers-bg\", \"prompt\": \"Dark auditorium with warm stage lighting, bokeh lights, professional conference atmosphere\", \"style\": \"section\"}\n]\n```\n\nGenerate 3-5 images. All images will be saved to site/images/ as card-{name}.png.\n\n## Page-by-Page Blueprint\nFor EACH page, specify:\n- **Filename**: e.g. index.html\n- **Page title**\n- **Sections** (in order, top to bottom):\n  - Section name (e.g. 'Hero', 'Speaker Grid', 'Contact Form')\n  - Content: actual text/headings/placeholder copy to use\n  - Layout: how this section is arranged (full-width hero, 3-column grid, etc.)\n  - Which generated image to use (reference as images/card-{name}.png)\n\n## Navigation\n- Nav items in order (which pages, what labels)\n- Mobile nav behavior (hamburger menu)\n\n## Footer\n- What goes in the footer (links, copyright, social icons)\n\nBe VERY specific with copy — write actual headings, taglines, button text, and paragraph text. Use the user's language.",
+        label="Plan",
+        tools="read_file",
+        timeout_secs="120"
+    ]
+
+    images [
+        prompt="You are an image generation specialist. You have received a website plan that contains a JSON code block with image definitions.\n\nYour job:\n\nStep 1: Extract the JSON array from the plan. It is inside a ```json fenced code block.\n\nStep 2: Write that JSON array to a file.\nUse write_file to save it to site/images.json\n\nStep 3: Generate all images using mofa cards.\nUse shell to run:\n/Users/yuechen/home/mofa-skills/mofa-cli/target/release/mofa cards --style web --card-dir site/images --aspect 16:9 --image-size 2K --root /Users/yuechen/home/mofa-skills -i site/images.json\n\nThis single command generates ALL images in parallel using the Gemini API.\n\nStep 4: Verify the images were generated.\nUse shell to run: ls -la site/images/\n\nOutput a manifest listing every generated image file with its size.\n\nIMPORTANT: The mofa cards command handles everything — API calls, retries, parallel generation, file saving. You just need to write the JSON and call the command.",
+        label="Images",
+        tools="shell,write_file,read_file",
+        timeout_secs="300"
+    ]
+
+    code [
+        prompt="You are an expert frontend developer. You have received a detailed website blueprint AND a set of generated images in site/images/. Your ONLY job is to write code files to disk using the write_file tool. Do NOT output code as text — you MUST call write_file for every file.\n\nFirst, use shell to run: ls site/images/ — to see what generated images are available. Image files are named card-{name}.png.\n\nIMPORTANT INSTRUCTIONS:\n1. Call write_file once for EACH file. Do NOT try to write all files in one response.\n2. Write ONE file at a time, then move to the next.\n3. Start with site/css/style.css, then site/js/main.js, then each HTML page.\n\nRules for the code:\n- Write clean, semantic, modern HTML5\n- All styles in site/css/style.css (no frameworks, no Tailwind CDN)\n- Mobile-first responsive design with media queries\n- Smooth, professional feel: subtle transitions, hover effects, proper spacing\n- Use CSS custom properties for the color palette and fonts\n- Include site/js/main.js for: mobile hamburger menu toggle, smooth scroll, and any interactive features\n- Use the GENERATED IMAGES from site/images/ — reference them as images/card-{name}.png in your HTML src attributes and CSS background-image properties\n- For hero sections, use the generated hero image as a full-width background with a dark semi-transparent overlay for text readability\n- If a specific image was not generated, fall back to https://placehold.co\n- Add Google Fonts via <link> tag in <head>\n- All pages share the same nav and footer\n- Include proper <meta> tags (viewport, description, charset)\n- Make it look GOOD — this should look like a real production website\n\nFiles to create (call write_file for each one):\n1. site/css/style.css — all styles with CSS custom properties\n2. site/js/main.js — hamburger menu, smooth scroll, interactive features\n3. site/index.html — home page\n4. Additional HTML pages as specified in the blueprint\n\nAfter writing ALL files, output a summary listing every file you created.",
+        label="Code",
+        tools="write_file,read_file,shell",
+        timeout_secs="900"
+    ]
+
+    review [
+        prompt="You are a QA engineer and deployment specialist. Your job is to read every generated file, check for issues, fix them, and write a deployment guide.\n\nStep 1: Use shell to run: find site/ -type f | sort — to see all files.\nThen use read_file to read EVERY file in the site/ directory:\n- site/css/style.css\n- site/js/main.js\n- site/index.html\n- Any other HTML files\n\nStep 2: Check for issues:\n- All internal links (href) point to files that exist\n- CSS file is linked correctly as css/style.css in every HTML page\n- JS file is linked correctly as js/main.js\n- Mobile nav works (hamburger menu in JS)\n- Generated images in site/images/ are referenced correctly as images/card-{name}.png\n- No broken or incomplete HTML (every tag is closed)\n- Footer and nav are consistent across all pages\n\nStep 3: Fix any issues by rewriting the affected files with write_file\n\nStep 4: Write site/DEPLOY.md with deployment instructions:\n- How to preview locally (just open index.html in browser)\n- How to deploy to GitHub Pages (step by step)\n- How to deploy to Netlify (drag and drop)\n- How to deploy to Vercel\n- How to add a custom domain\n\nOutput a final summary:\n- Total files in site/\n- Generated images list with sizes\n- Any issues found and fixed\n- Confirmation that the site is ready for deployment",
+        label="Review",
+        tools="read_file,write_file,shell",
+        goal_gate="true",
+        timeout_secs="600"
+    ]
+
+    research -> plan -> images -> code -> review
+}
