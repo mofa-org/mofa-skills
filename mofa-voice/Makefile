@@ -33,6 +33,7 @@ dist: build
 	mkdir -p $(DEPLOY_DIR)
 	cp target/release/mofa-voice $(DEPLOY_DIR)/
 	cp $(OMINIX_DIR)/target/release/ominix-api $(DEPLOY_DIR)/
+	cp $(OMINIX_DIR)/target/release/mlx.metallib $(DEPLOY_DIR)/
 	cp manifest.json $(DEPLOY_DIR)/
 	cp SKILL.md $(DEPLOY_DIR)/
 	@echo ""

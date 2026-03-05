@@ -59,12 +59,22 @@ cp "$PROJECT_DIR/SKILL.md" "$VOICE_STAGING/"
 rm -rf "$VOICE_STAGING"
 ok "mofa-voice-darwin-aarch64.tar.gz"
 
-# Create ominix-api tarball
+# Create ominix-api tarball (includes mlx.metallib for Metal GPU shaders)
 info "Packaging ominix-api..."
 API_STAGING="$DIST_DIR/ominix-api-staging"
 mkdir -p "$API_STAGING"
 cp "$OMINIX_DIR/target/release/ominix-api" "$API_STAGING/"
-(cd "$API_STAGING" && tar -czf "$DIST_DIR/ominix-api-darwin-aarch64.tar.gz" ominix-api)
+
+# mlx.metallib MUST be colocated with the binary at runtime
+METALLIB="$OMINIX_DIR/target/release/mlx.metallib"
+if [ -f "$METALLIB" ]; then
+    cp "$METALLIB" "$API_STAGING/"
+    ok "mlx.metallib included ($(du -h "$METALLIB" | awk '{print $1}'))"
+else
+    die "mlx.metallib not found at $METALLIB — rebuild ominix-api first"
+fi
+
+(cd "$API_STAGING" && tar -czf "$DIST_DIR/ominix-api-darwin-aarch64.tar.gz" ominix-api mlx.metallib)
 rm -rf "$API_STAGING"
 ok "ominix-api-darwin-aarch64.tar.gz"
 

@@ -69,6 +69,16 @@ build_server() {
     cp "$OMINIX_DIR/target/release/ominix-api" "$OMINIX_BIN"
     chmod +x "$OMINIX_BIN"
     ok "ominix-api installed at $OMINIX_BIN"
+
+    # mlx.metallib must be colocated with binary for Metal GPU shaders
+    local metallib="$OMINIX_DIR/target/release/mlx.metallib"
+    local metallib_dest="$(dirname "$OMINIX_BIN")/mlx.metallib"
+    if [ -f "$metallib" ]; then
+        cp "$metallib" "$metallib_dest"
+        ok "mlx.metallib installed at $metallib_dest"
+    else
+        warn "mlx.metallib not found — ominix-api may fail to start without Metal shaders"
+    fi
 }
 
 # ── Wait for async model download ────────────────────────────────────

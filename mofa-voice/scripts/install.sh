@@ -171,6 +171,14 @@ install_server() {
     chmod +x "$OMINIX_BIN_DIR/ominix-api"
     ok "ominix-api installed to $OMINIX_BIN_DIR/ominix-api"
 
+    # mlx.metallib must be colocated with the binary for Metal GPU shaders
+    if [ -f "$OMINIX_BIN_DIR/mlx.metallib" ]; then
+        ok "mlx.metallib installed (Metal GPU shaders)"
+    else
+        warn "mlx.metallib not found in release tarball — ominix-api may fail to start"
+        warn "This file contains compiled Metal shaders required for GPU inference"
+    fi
+
     # Add to PATH hint
     if ! echo "$PATH" | tr ':' '\n' | grep -q "$OMINIX_BIN_DIR"; then
         warn "$OMINIX_BIN_DIR is not in PATH"
