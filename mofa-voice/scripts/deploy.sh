@@ -24,9 +24,9 @@ SKILL_DIR="${SKILL_DIR:-$HOME/.crew/skills/mofa-voice}"
 PORT="${OMINIX_PORT:-8080}"
 DOWNLOAD_PORT=18080  # temp port for model downloads
 
-ASR_REPO="OminiXAI/Qwen3-ASR-1.7B-MLX-8bit"
-TTS_REPO="OminiXAI/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
-ASR_MODEL_NAME="Qwen3-ASR-1.7B-MLX-8bit"
+ASR_REPO="mlx-community/Qwen3-ASR-1.7B-8bit"
+TTS_REPO="mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
+ASR_MODEL_NAME="Qwen3-ASR-1.7B-8bit"
 TTS_MODEL_NAME="Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
 
 PLIST_LABEL="io.ominix.ominix-api"

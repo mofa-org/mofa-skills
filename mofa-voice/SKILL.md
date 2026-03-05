@@ -56,9 +56,9 @@ Download models (first time only):
 ```bash
 # Via ominix-api
 curl -X POST http://localhost:8080/v1/models/download \
-  -d '{"repo_id": "OminiXAI/Qwen3-ASR-1.7B-MLX-8bit"}'
+  -d '{"repo_id": "mlx-community/Qwen3-ASR-1.7B-8bit"}'
 curl -X POST http://localhost:8080/v1/models/download \
-  -d '{"repo_id": "OminiXAI/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"}'
+  -d '{"repo_id": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"}'
 ```
 
 Models stored at `~/.OminiX/models/`.
