@@ -1,38 +1,27 @@
 ---
 name: mofa-infographic
-description: "AI-generated infographics and visual posters. Triggers: infographic, poster, 信息图, 海报, data poster, visual summary, mofa infographic. Generates multi-panel infographic sections via Gemini with optional Qwen-Edit refinement, stitched into a single tall image."
+description: "AI-generated infographics and visual posters. Triggers: infographic, poster, 信息图, 海报, data poster, visual summary, mofa infographic. Generates multi-section infographic via Gemini with optional Qwen-Edit refinement, stitched into a single tall image."
 requires_bins:
-  - node
-  - magick
+  - mofa
 requires_env:
   - GEMINI_API_KEY
 ---
 
 # mofa-infographic
 
-Engine: `~/.crew/skills/mofa-infographic/lib/infographic-gen.js`
-Styles: `~/.crew/skills/mofa-infographic/styles/*.toml`
-Config: `~/.crew/skills/mofa/config.json`
+CLI: `mofa infographic`
+Styles: `mofa-infographic/styles/*.toml`
+Config: `mofa/config.json`
 
 ## Quick Start
 
-```javascript
-const { generateInfographic } = require("~/.crew/skills/mofa-infographic/lib/infographic-gen");
-
-generateInfographic({
-  outDir: "infographic-output",
-  outFile: "poster.png",
-  style: "cyberpunk-neon",
-  sections: [
-    { prompt: "Header section: 'AI in 2025' bold title with futuristic circuit patterns" },
-    { prompt: "Stats section: 3 KPI cards — $247B market size, 3.2x growth, 140+ programs" },
-    { prompt: "Timeline section: 5 milestone markers from 2020 to 2025" },
-    { prompt: "Footer: sources and credits in small text" },
-  ],
-  aspectRatio: "9:16",
-  imageSize: "2K",
-  concurrency: 3,
-});
+```bash
+echo '[
+  {"prompt": "Header: AI in 2025 bold title with futuristic circuit patterns"},
+  {"prompt": "Stats: 3 KPI cards — $247B market size, 3.2x growth, 140+ programs"},
+  {"prompt": "Timeline: 5 milestone markers from 2020 to 2025"},
+  {"prompt": "Footer: sources and credits in small text"}
+]' | mofa infographic --style cyberpunk-neon --out poster.png
 ```
 
 ## 4 Built-in Styles
@@ -44,29 +33,34 @@ generateInfographic({
 | `clean-light` | White background, minimal, data-forward | Business, consulting |
 | `multi-panel` | Bold color blocks, section dividers | Comparisons, summaries |
 
-## API: generateInfographic(config)
+## Input JSON
 
-| Param | Type | Default | Description |
-|-------|------|---------|-------------|
-| `outDir` | string | required | Working directory for section PNGs |
-| `outFile` | string | required | Final stitched output image |
-| `style` | string | "cyberpunk-neon" | Style name (from styles/*.toml) |
-| `sections` | array | required | `[{ prompt, refinePrompt? }]` |
-| `aspectRatio` | string | "9:16" | Per-section aspect ratio |
-| `imageSize` | string | "2K" | `"1K"` / `"2K"` / `"4K"` |
-| `concurrency` | number | 3 | Parallel workers |
-| `refineWithQwen` | boolean | true | Refine sections with Dashscope Qwen-Edit |
-| `gutter` | number | 0 | Gap between sections in pixels |
+```json
+[
+  { "prompt": "Section description...", "variant": "header", "refine_prompt": "Optional" }
+]
+```
+
+Variant auto-detection: first section = "header", last = "footer", middle = "normal". Override with `variant` field.
+
+## CLI Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--style` | `cyberpunk-neon` | Style name (from styles/*.toml) |
+| `--out` / `-o` | required | Final stitched output image |
+| `--work-dir` | parent of --out | Working directory for section PNGs |
+| `--aspect` | `16:9` | Per-section aspect ratio |
+| `--concurrency` | 3 | Parallel workers |
+| `--image-size` | - | `"1K"` / `"2K"` / `"4K"` |
+| `--refine` | false | Refine sections with Dashscope Qwen-Edit |
+| `--gutter` | 0 | Gap between sections in pixels |
+| `-i` / `--input` | stdin | Input JSON file |
 
 ## Config
 
-Read or edit `~/.crew/skills/mofa/config.json`.
+`mofa/config.json`:
 
-**API keys** — use environment variables (never commit literal keys):
-- `"env:GEMINI_API_KEY"` — set via `export GEMINI_API_KEY="your-key"`
-- Optional: `api_keys.dashscope` for Qwen-Edit refinement
-
+**API keys**: `"env:GEMINI_API_KEY"` — set via `export GEMINI_API_KEY="your-key"`
+Optional: `api_keys.dashscope` for `--refine` (Qwen-Edit refinement).
 **Models**: `gen_model`, `edit_model`.
-**Defaults**: `defaults.infographic.*`: `style`, `panels`, `refine_with_qwen`.
-
-Example: "use editorial style by default" / "disable qwen refinement"

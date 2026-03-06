@@ -2,36 +2,25 @@
 name: mofa-comic
 description: "AI-generated comic strips and illustrations. Triggers: comic, manga, xkcd, 漫画, comic strip, 四格漫画, panel comic, illustration strip. Generates multi-panel comics via Gemini with optional Qwen-Edit refinement, stitched into a single image."
 requires_bins:
-  - node
-  - magick
+  - mofa
 requires_env:
   - GEMINI_API_KEY
 ---
 
 # mofa-comic
 
-Engine: `~/.crew/skills/mofa-comic/lib/comic-gen.js`
-Styles: `~/.crew/skills/mofa-comic/styles/*.toml`
-Config: `~/.crew/skills/mofa/config.json`
+CLI: `mofa comic`
+Styles: `mofa-comic/styles/*.toml`
+Config: `mofa/config.json`
 
 ## Quick Start
 
-```javascript
-const { generateComic } = require("~/.crew/skills/mofa-comic/lib/comic-gen");
-
-generateComic({
-  outDir: "comic-output",
-  outFile: "strip.png",
-  style: "xkcd",
-  panels: [
-    { prompt: "A programmer staring at a screen showing 99 bugs. Speech bubble: 'Fixed one bug...'" },
-    { prompt: "The screen now shows 117 bugs. The programmer's jaw drops." },
-    { prompt: "The programmer closes the laptop and walks away into the sunset." },
-  ],
-  layout: "horizontal",   // horizontal | vertical | grid
-  imageSize: "2K",
-  concurrency: 3,
-});
+```bash
+echo '[
+  {"prompt": "A programmer staring at a screen showing 99 bugs. Speech bubble: Fixed one bug..."},
+  {"prompt": "The screen now shows 117 bugs. The programmer jaw drops."},
+  {"prompt": "The programmer closes the laptop and walks away into the sunset."}
+]' | mofa comic --style xkcd --out strip.png --layout horizontal
 ```
 
 ## 5 Built-in Styles
@@ -44,29 +33,32 @@ generateComic({
 | `pop-art` | Bold colors, halftone dots, Lichtenstein | Impactful, advertising |
 | `graphic-novel` | Dark, detailed, atmospheric | Serious narratives |
 
-## API: generateComic(config)
+## Input JSON
 
-| Param | Type | Default | Description |
-|-------|------|---------|-------------|
-| `outDir` | string | required | Working directory for panel PNGs |
-| `outFile` | string | required | Final stitched output image |
-| `style` | string | "xkcd" | Style name (from styles/*.toml) |
-| `panels` | array | required | `[{ prompt, refinePrompt? }]` |
-| `layout` | string | "horizontal" | `"horizontal"` / `"vertical"` / `"grid"` |
-| `imageSize` | string | "2K" | `"1K"` / `"2K"` / `"4K"` |
-| `concurrency` | number | 3 | Parallel workers |
-| `refineWithQwen` | boolean | false | Refine panels with Dashscope Qwen-Edit |
-| `gutter` | number | 20 | Gap between panels in pixels |
+```json
+[
+  { "prompt": "Panel description...", "refine_prompt": "Optional Qwen-Edit instruction" }
+]
+```
+
+## CLI Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--style` | `xkcd` | Style name (from styles/*.toml) |
+| `--out` / `-o` | required | Final stitched output image |
+| `--work-dir` | parent of --out | Working directory for panel PNGs |
+| `--layout` | `horizontal` | `"horizontal"` / `"vertical"` / `"grid"` |
+| `--concurrency` | 3 | Parallel workers |
+| `--image-size` | - | `"1K"` / `"2K"` / `"4K"` |
+| `--refine` | false | Refine panels with Dashscope Qwen-Edit |
+| `--gutter` | 20 | Gap between panels in pixels |
+| `-i` / `--input` | stdin | Input JSON file |
 
 ## Config
 
-Read or edit `~/.crew/skills/mofa/config.json`.
+`mofa/config.json`:
 
-**API keys** — use environment variables (never commit literal keys):
-- `"env:GEMINI_API_KEY"` — set via `export GEMINI_API_KEY="your-key"`
-- Optional: `api_keys.dashscope` for Qwen-Edit refinement
-
+**API keys**: `"env:GEMINI_API_KEY"` — set via `export GEMINI_API_KEY="your-key"`
+Optional: `api_keys.dashscope` for `--refine` (Qwen-Edit refinement).
 **Models**: `gen_model`, `edit_model`.
-**Defaults**: `defaults.comic.*`: `style`, `panels`, `refine_with_qwen`.
-
-Example: "use manga style by default for comics" / "enable qwen refinement for comics"

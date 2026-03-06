@@ -2,42 +2,28 @@
 name: mofa-cards
 description: "AI-generated greeting cards as PNG images. Triggers: greeting card, 贺卡, mofa card, mofa 贺卡, make a card, CNY card, New Year card, 新年贺卡, ink-wash card. Generates full-bleed AI artwork via Gemini in various Chinese art styles."
 requires_bins:
-  - node
+  - mofa
 requires_env:
   - GEMINI_API_KEY
 ---
 
 # mofa-cards
 
-Engine: `~/.crew/skills/mofa/lib/engine.js`
-Styles: `~/.crew/skills/mofa-cards/styles/*.toml`
-Config: `~/.crew/skills/mofa/config.json`
+CLI: `mofa cards`
+Styles: `mofa-cards/styles/*.toml`
+Config: `mofa/config.json`
 
 ## Quick Start
 
-```javascript
-const { runCards } = require("~/.crew/skills/mofa/lib/engine");
-const { loadStyle } = require("~/.crew/skills/mofa/lib/toml-style");
-
-const style = loadStyle("~/.crew/skills/mofa-cards/styles/cny-guochao.toml");
-
-const cards = [
-  { name: "front", style: "front", prompt: '新春大吉! A dragon soaring through golden clouds, red lanterns below.' },
-  { name: "greeting", style: "greeting", prompt: '恭贺新禧\n万事如意 阖家欢乐\n新的一年 平安喜乐' },
-  { name: "scene", style: "scene", prompt: 'Family reunion dinner scene, round table with festive dishes, red lanterns, fireworks in night sky' },
-];
-
-runCards({
-  cardDir: "cards-output",
-  cards,
-  getStyle: style.getStyle,
-  aspectRatio: "9:16",
-  concurrency: 3,
-  imageSize: "2K",
-});
+```bash
+echo '[
+  {"name": "front", "style": "front", "prompt": "新春大吉! A dragon soaring through golden clouds, red lanterns below."},
+  {"name": "greeting", "style": "greeting", "prompt": "恭贺新禧\n万事如意 阖家欢乐"},
+  {"name": "scene", "style": "scene", "prompt": "Family reunion dinner scene, round table with festive dishes"}
+]' | mofa cards --style cny-guochao --card-dir cards-output
 ```
 
-## 7 Built-in Styles
+## 8 Built-in Styles
 
 | Style | Theme | Best For |
 |-------|-------|----------|
@@ -47,27 +33,35 @@ runCards({
 | `laoshu` | 老吴画画 ink figure + folk poetry | Folk wisdom, humor |
 | `lingnan` | 岭南画派 botanical ink-wash | Tea camps, heritage |
 | `shuimo` | 水墨 traditional ink-wash slides | Chinese painting |
+| `web` | Clean modern photography | Website hero/section images |
 | `xianer` | 贤二漫画 cute little monk | Buddhist style, healing |
 
-## API: runCards(config)
+## Input JSON
 
-| Param | Type | Default | Description |
-|-------|------|---------|-------------|
-| `cardDir` | string | required | Output directory for PNGs |
-| `cards` | array | required | `[{ name, style, prompt }]` |
-| `getStyle` | function | required | `(tag) => promptString` |
-| `aspectRatio` | string | "9:16" | `"9:16"` / `"3:4"` / `"1:1"` / `"4:3"` / `"16:9"` |
-| `concurrency` | number | 5 | Parallel workers |
-| `imageSize` | string | - | `"1K"` / `"2K"` / `"4K"` |
+```json
+[
+  { "name": "front", "style": "front", "prompt": "..." },
+  { "name": "greeting", "style": "greeting", "prompt": "..." }
+]
+```
+
+Each card: `{ name, prompt, style? }`. Style is the variant within the TOML file (e.g. "front", "greeting", "scene").
+
+## CLI Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--style` | `cny-guochao` | Style name (from styles/*.toml) |
+| `--card-dir` | required | Output directory for PNGs |
+| `--aspect` | `9:16` | `"9:16"` / `"3:4"` / `"1:1"` / `"16:9"` |
+| `--concurrency` | 5 | Parallel workers |
+| `--image-size` | - | `"1K"` / `"2K"` / `"4K"` |
+| `-i` / `--input` | stdin | Input JSON file |
 
 ## Config
 
-Read or edit `~/.crew/skills/mofa/config.json`.
+`mofa/config.json`:
 
-**API keys** — use environment variables (never commit literal keys):
-- `"env:GEMINI_API_KEY"` — set via `export GEMINI_API_KEY="your-key"`
-
-**Models**: `gen_model` (image gen), `vision_model`, `edit_model` (Qwen refinement).
+**API keys**: `"env:GEMINI_API_KEY"` — set via `export GEMINI_API_KEY="your-key"`
+**Models**: `gen_model` (image gen).
 **Defaults**: `defaults.cards.*`: `style`, `aspect_ratio`, `image_size`.
-
-Example: "use cny-shuimo style by default for cards"
