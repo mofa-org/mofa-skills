@@ -236,11 +236,9 @@ pub fn build_pptx(slides: &[SlideData], out_file: &Path, slide_w: f64, slide_h: 
         slide_xmls.push(slide_xml);
 
         // Slide relationships
-        let mut rels = format!(
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        let mut rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>"#
-        );
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>"#.to_string();
         if has_image {
             rels.push_str(&format!(
                 r#"

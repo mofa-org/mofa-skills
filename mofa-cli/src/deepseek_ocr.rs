@@ -7,6 +7,7 @@ use std::path::Path;
 /// A text block detected by DeepSeek-OCR-2 with grounding.
 /// Bounding box coordinates are normalized to [0, 1000) range.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct OcrBlock {
     pub text: String,
     pub block_type: String, // "text", "sub_title", "title", etc.
@@ -16,6 +17,7 @@ pub struct OcrBlock {
     pub y2: f64,
 }
 
+#[allow(dead_code)]
 impl OcrBlock {
     /// Convert normalized coords to pixel coords given image dimensions.
     pub fn to_pixels(&self, img_w: f64, img_h: f64) -> (f64, f64, f64, f64) {

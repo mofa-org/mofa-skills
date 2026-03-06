@@ -33,6 +33,7 @@ pub struct SlideInput {
 }
 
 /// Full slides pipeline: generate images + build multi-slide PPTX.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     slide_dir: &Path,
     out_file: &Path,
@@ -95,14 +96,13 @@ pub fn run(
         .build()?;
 
     pool.scope(|s| {
-        for idx in 0..total {
+        for (idx, slide) in slides.iter().enumerate() {
             let gemini = &gemini;
             let dashscope = &dashscope;
             let deepseek_ocr = &deepseek_ocr;
             let ref_paths = Arc::clone(&ref_paths);
             let extracted_texts = Arc::clone(&extracted_texts);
             let direct_paths = Arc::clone(&direct_paths);
-            let slide = &slides[idx];
 
             s.spawn(move |_| {
                 let variant = slide.style.as_deref().unwrap_or("normal");
@@ -288,6 +288,7 @@ pub fn run(
     let direct_paths = direct_paths.lock().unwrap().clone();
     let mut final_paths: Vec<Option<PathBuf>> = vec![None; total];
 
+    #[allow(clippy::needless_range_loop)]
     for idx in 0..total {
         if !slides[idx].auto_layout {
             final_paths[idx] = direct_paths[idx].clone();

@@ -18,6 +18,7 @@ pub struct PanelInput {
 }
 
 /// Comic pipeline: generate panels, optional Qwen refinement, stitch.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     out_dir: &Path,
     out_file: &Path,
@@ -52,10 +53,9 @@ pub fn run(
         .build()?;
 
     pool.scope(|s| {
-        for idx in 0..total {
+        for (idx, panel) in panels.iter().enumerate() {
             let gemini = &gemini;
             let panel_paths = Arc::clone(&panel_paths);
-            let panel = &panels[idx];
 
             s.spawn(move |_| {
                 let prefix = style.get_prompt("panel");

@@ -214,7 +214,7 @@ fn main() -> Result<()> {
     color_eyre::install()?;
     let cli = Cli::parse();
 
-    let mofa_root = cli.root.unwrap_or_else(|| config::find_mofa_root());
+    let mofa_root = cli.root.unwrap_or_else(config::find_mofa_root);
     let cfg = config::MofaConfig::load_default(&mofa_root);
 
     match cli.command {

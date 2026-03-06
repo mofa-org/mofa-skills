@@ -27,6 +27,7 @@ impl GeminiClient {
     /// Generate an image via Gemini `generateContent` with IMAGE response modality.
     ///
     /// Returns the output file path on success, None on failure after retries.
+    #[allow(clippy::too_many_arguments)]
     pub fn gen_image(
         &self,
         prompt: &str,

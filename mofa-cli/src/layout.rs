@@ -78,7 +78,7 @@ Return ONLY a JSON array."#
 
     let overlays: Vec<TextOverlay> = raw
         .into_iter()
-        .filter_map(|v| {
+        .map(|v| {
             let text = v.get("text").and_then(|t| t.as_str()).map(String::from);
 
             // Support both percentage-based (new) and pixel-based (fallback) coordinates
@@ -99,7 +99,7 @@ Return ONLY a JSON array."#
             let font_size = v.get("fontSize").and_then(|n| n.as_f64());
             let align = v.get("align").and_then(|a| a.as_str()).unwrap_or("l").to_string();
 
-            Some(TextOverlay {
+            TextOverlay {
                 text,
                 x,
                 y,
@@ -114,7 +114,7 @@ Return ONLY a JSON array."#
                 valign: String::new(),
                 rotate: None,
                 runs: None,
-            })
+            }
         })
         .collect();
 
@@ -129,18 +129,11 @@ Return ONLY a JSON array."#
     let max_y = overlays.iter().map(|ov| ov.y).fold(f64::NEG_INFINITY, f64::max);
 
     for ov in &mut overlays {
-        // Title: within 0.3" of topmost element → full width
-        if ov.y - min_y < 0.3 {
-            ov.x = 0.3;
-            ov.w = sw - 0.6;
-        }
-        // Footer: within 0.3" of bottommost element → full width
-        else if max_y - ov.y < 0.3 {
-            ov.x = 0.3;
-            ov.w = sw - 0.6;
-        }
-        // Other centered wide elements
-        else if ov.align == "ctr" && ov.w > sw * 0.4 {
+        // Title/footer (within 0.3" of top/bottom) or centered wide elements → full width
+        if ov.y - min_y < 0.3
+            || max_y - ov.y < 0.3
+            || (ov.align == "ctr" && ov.w > sw * 0.4)
+        {
             ov.x = 0.3;
             ov.w = sw - 0.6;
         }
@@ -565,15 +558,15 @@ fn align_columns(overlays: &mut [TextOverlay], sw: f64, _sh: f64) {
     let content_w = sw - 2.0 * margin;
     let col_width = (content_w - (col_count as f64 - 1.0) * gap) / col_count as f64;
 
-    for ci in 0..col_count {
+    for (ci, col) in columns.iter().enumerate() {
         let col_x = margin + ci as f64 * (col_width + gap);
 
         eprintln!(
             "  col-align [{ci}]: {} members, x={col_x:.2}\" w={col_width:.2}\"",
-            columns[ci].len(),
+            col.len(),
         );
 
-        for &idx in &columns[ci] {
+        for &idx in col {
             overlays[idx].x = col_x;
             overlays[idx].w = col_width;
         }

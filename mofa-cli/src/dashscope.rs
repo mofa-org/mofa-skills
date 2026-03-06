@@ -10,6 +10,7 @@ const DEFAULT_EDIT_MODEL: &str = "qwen-image-edit-max-2026-01-16";
 /// A word/line detected by OCR with 4-corner bounding box (pixel coordinates).
 /// Corners: top-left (x1,y1), top-right (x2,y2), bottom-right (x3,y3), bottom-left (x4,y4).
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct OcrWord {
     pub text: String,
     pub x1: f64, pub y1: f64,
@@ -18,6 +19,7 @@ pub struct OcrWord {
     pub x4: f64, pub y4: f64,
 }
 
+#[allow(dead_code)]
 impl OcrWord {
     /// Bounding box left edge (min x).
     pub fn left(&self) -> f64 { self.x1.min(self.x4) }
@@ -191,13 +193,13 @@ impl DashscopeClient {
 
             // Check for rate limit
             if let Some(code) = data.get("code").and_then(|c| c.as_str()) {
-                if code.contains("RateQuota") || code.contains("Throttling") {
-                    if attempt < max_retries {
-                        let wait = 10 * (attempt + 1) as u64;
-                        eprintln!("  Dashscope: rate limited, retrying in {wait}s...");
-                        std::thread::sleep(std::time::Duration::from_secs(wait));
-                        continue;
-                    }
+                if (code.contains("RateQuota") || code.contains("Throttling"))
+                    && attempt < max_retries
+                {
+                    let wait = 10 * (attempt + 1) as u64;
+                    eprintln!("  Dashscope: rate limited, retrying in {wait}s...");
+                    std::thread::sleep(std::time::Duration::from_secs(wait));
+                    continue;
                 }
             }
 

@@ -19,6 +19,7 @@ pub struct SectionInput {
 }
 
 /// Infographic pipeline: generate sections, optional Qwen refinement, vertical stitch.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     out_dir: &Path,
     out_file: &Path,
@@ -53,10 +54,9 @@ pub fn run(
         .build()?;
 
     pool.scope(|s| {
-        for idx in 0..total {
+        for (idx, section) in sections.iter().enumerate() {
             let gemini = &gemini;
             let section_paths = Arc::clone(&section_paths);
-            let section = &sections[idx];
 
             s.spawn(move |_| {
                 // Auto variant: header / normal / footer

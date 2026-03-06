@@ -93,7 +93,7 @@ pub fn stitch_grid(paths: &[&Path], gutter: u32, out_file: &Path) -> Result<()> 
     }
 
     let cols = (paths.len() as f64).sqrt().ceil() as usize;
-    let rows = (paths.len() + cols - 1) / cols;
+    let rows = paths.len().div_ceil(cols);
 
     let images: Vec<image::DynamicImage> = paths
         .iter()

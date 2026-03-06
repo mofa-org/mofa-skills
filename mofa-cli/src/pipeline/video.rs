@@ -21,6 +21,7 @@ pub struct VideoCardInput {
 }
 
 /// Animate a single card image into a video with BGM.
+#[allow(clippy::too_many_arguments)]
 fn animate_card(
     veo: &VeoClient,
     image_path: &Path,
@@ -157,6 +158,7 @@ fn animate_card(
 }
 
 /// Video card pipeline: generate PNG cards → animate each → MP4 with BGM.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn run(
     card_dir: &Path,
     cards: &[VideoCardInput],
@@ -200,10 +202,9 @@ pub fn run(
         .build()?;
 
     pool.scope(|s| {
-        for idx in 0..total {
+        for (idx, card) in cards.iter().enumerate() {
             let gemini = &gemini;
             let img_paths = Arc::clone(&img_paths);
-            let card = &cards[idx];
 
             s.spawn(move |_| {
                 let variant = card.style.as_deref().unwrap_or("front");

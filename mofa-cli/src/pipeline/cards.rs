@@ -17,6 +17,7 @@ pub struct CardInput {
 }
 
 /// Card pipeline: generate PNG greeting cards in parallel.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     card_dir: &Path,
     cards: &[CardInput],
@@ -59,10 +60,9 @@ pub fn run(
         .build()?;
 
     pool.scope(|s| {
-        for idx in 0..total {
+        for (idx, card) in cards.iter().enumerate() {
             let gemini = &gemini;
             let paths = Arc::clone(&paths);
-            let card = &cards[idx];
 
             s.spawn(move |_| {
                 let variant = card.style.as_deref().unwrap_or("front");
