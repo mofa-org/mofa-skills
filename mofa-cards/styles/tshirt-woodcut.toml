@@ -1,0 +1,85 @@
+[meta]
+name = "tshirt-woodcut"
+display_name = "T-Shirt Modern Woodcut"
+description = "Modern woodcut portrait with Chinese liubai aesthetic, medium-weight lines, minimal symbolic diagrams"
+category = "tshirt"
+tags = ["tshirt", "woodcut", "print", "portrait", "liubai", "philosophical"]
+
+[variants]
+default = "portrait"
+
+[variants.portrait]
+prompt = """
+Create a T-shirt art design. 4:3 landscape format.
+
+This is a T-SHIRT PRINT design, not a greeting card. It must be screen-print ready.
+
+VISUAL LANGUAGE — Modern woodcut + Chinese liubai (negative space):
+- Modern European woodcut/engraving aesthetic adapted for screen printing
+- Medium-weight lines (0.5mm minimum) — thick enough for clean screen printing, not so heavy as to lose elegance
+- Think: modern reinterpretation of Renaissance portrait engravings with East Asian empty-space philosophy
+- Clean parallel hatching for shading — organized, not chaotic
+- The portrait emerges from the line work with quiet confidence
+
+PORTRAIT STYLE:
+- Complete portrait — full head, neck and upper shoulders, NOT cropped at edges
+- Medium-weight engraving lines define the face and figure
+- Parallel hatching for shadow areas — clean and directional
+- Historical accuracy for period clothing and hairstyle
+- Expression should convey the thinker's character
+
+SYMBOLIC ELEMENT:
+- ONE small symbolic illustration — a diagram, instrument, or concept rendered as clean line art
+- Style matches the portrait: same line weight, same engraving aesthetic
+- Think: encyclopedia plate illustration quality, but simplified to 10-15 lines maximum
+- Size: small, roughly 10-15% of canvas
+
+COMPOSITION:
+- Portrait on the left, ~40% of canvas
+- Symbol floats in the white space on the right
+- French text: large, clean serif typography
+- Chinese text: smaller, directly below
+- Person's name small near the portrait
+- Background: PURE WHITE — at least 40% empty (liubai aesthetic)
+- The emptiness is intentional — it gives the design room to breathe
+
+CRITICAL CONSTRAINTS:
+- Medium line weight throughout — balanced between printability and elegance
+- Black on white only — no color, no gray tones
+- Print-ready for screen printing: clean lines, no fine detail that would clog screens
+- The design should feel philosophical and contemplative, not decorative
+"""
+
+[variants.light]
+prompt = """
+Create a T-shirt art design. 4:3 landscape format.
+
+This is a T-SHIRT PRINT design with LIGHTER, more elegant line work.
+
+VISUAL LANGUAGE — Light pen-and-ink illustration:
+- Elegant fine pen lines — think Aubrey Beardsley lightness without the density
+- Delicate hatching, airy composition, the line floats on the page
+- Historical portrait with period accuracy
+- Lines suggest rather than define — leaving room for imagination
+
+PORTRAIT STYLE:
+- Complete portrait — full head to shoulders
+- Fine but confident pen lines
+- Minimal hatching — only where needed for form
+- Elegant and refined, not heavy
+
+SYMBOLIC ELEMENT:
+- ONE small symbolic line drawing — same delicate pen style
+- Minimal and suggestive rather than detailed
+
+COMPOSITION:
+- Portrait on the left, ~40% of canvas
+- Generous white space — at least 50% empty
+- French text in refined serif, Chinese text smaller below
+- Person's name small near the portrait
+
+CRITICAL CONSTRAINTS:
+- Lines must still be thick enough for screen printing (0.3mm minimum)
+- Black on white only
+- Elegance through restraint — every line must earn its place
+"""

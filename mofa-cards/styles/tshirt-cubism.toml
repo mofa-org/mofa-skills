@@ -1,0 +1,39 @@
+[meta]
+name = "tshirt-cubism"
+display_name = "T-Shirt Cubism"
+description = "Analytical Cubism portrait style, fragmented geometric faces, muted earth tones"
+category = "tshirt"
+tags = ["tshirt", "cubism", "print", "portrait", "geometric", "Paris"]
+
+[variants]
+default = "portrait"
+
+[variants.portrait]
+prompt = """
+Create a T-shirt art design. 4:3 landscape format.
+
+This is a T-SHIRT PRINT design, not a greeting card. It must be screen-print ready.
+
+VISUAL LANGUAGE — CUBIST portrait style:
+- Analytical Cubism meets portrait — Picasso/Braque/Juan Gris influence
+- The face is FRAGMENTED into multiple angular planes viewed from different angles simultaneously
+- Geometric facets: triangles, trapezoids, overlapping planes showing front AND profile at once
+- LIMITED PALETTE: muted earth tones — ochre, gray-blue, warm brown, charcoal, cream white
+- Think: Picasso's "Portrait of Daniel-Henry Kahnweiler" or Juan Gris portraits
+- Planes overlap with slight transparency — some areas darker where shapes layer
+- The portrait should be RECOGNIZABLE despite fragmentation — not pure abstraction
+
+COMPOSITION:
+- Cubist portrait occupies the left ~45% of canvas
+- A small symbolic element rendered in the same cubist geometric language
+- French text large and bold, Chinese text smaller below
+- Person's name small near the portrait
+- Background: light warm gray or cream — at least 40% empty
+
+CRITICAL CONSTRAINTS:
+- Face MUST show multiple viewpoints simultaneously (cubist signature)
+- Angular geometric planes — NOT smooth curves
+- Limited muted palette — NOT colorful, NOT black-and-white
+- The design should feel intellectual and analytical — cubism as a way of seeing
+- Print-ready: clear shapes with defined edges
+"""

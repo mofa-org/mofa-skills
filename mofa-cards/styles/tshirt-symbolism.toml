@@ -1,0 +1,41 @@
+[meta]
+name = "tshirt-symbolism"
+display_name = "T-Shirt Symbolism"
+description = "French Symbolist art, Odilon Redon/Gustave Moreau, luminous faces from darkness"
+category = "tshirt"
+tags = ["tshirt", "symbolism", "print", "portrait", "dark", "Paris"]
+
+[variants]
+default = "portrait"
+
+[variants.portrait]
+prompt = """
+Create a T-shirt art design. 4:3 landscape format.
+
+This is a T-SHIRT PRINT design for DARK fabric (navy or black). It must be screen-print ready.
+
+VISUAL LANGUAGE — French SYMBOLIST art style:
+- French Symbolism — Odilon Redon, Gustave Moreau influence
+- Dreamlike, mysterious, ethereal atmosphere
+- The portrait emerges from darkness or mist — figures dissolving into thought
+- Dark backgrounds with luminous faces — like visions appearing from the void
+- Soft edges that blur into the background — NOT hard graphic outlines
+- Think: Redon's charcoal "Noirs", his pastel dreamscapes, Moreau's mystical portraits
+- A sense of the INVISIBLE made visible — thought, consciousness, inner life
+- Primarily DARK palette: deep charcoal, midnight blue, with luminous warm highlights on the face
+
+COMPOSITION:
+- Portrait emerges from dark atmospheric background on the left ~45%
+- A small symbolic/mystical element floats in the darkness — an eye, a sphere, a light
+- French text in luminous warm tone, Chinese text smaller below
+- Person's name small near the portrait
+- The darkness itself is the "background" — not white space but deep shadow
+
+CRITICAL CONSTRAINTS:
+- DARK and ATMOSPHERIC — this is the opposite of clean white-space designs
+- The face should GLOW against the darkness — like a vision or apparition
+- Soft, painterly edges — NOT graphic, NOT sharp lines
+- Mysterious and philosophical in mood — thought made visible
+- Limited palette: deep dark tones + luminous warm skin/gold highlights
+- Print-ready on DARK fabric (navy or black T-shirt)
+"""

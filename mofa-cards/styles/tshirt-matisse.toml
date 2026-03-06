@@ -1,0 +1,40 @@
+[meta]
+name = "tshirt-matisse"
+display_name = "T-Shirt Matisse Cut-Outs"
+description = "Henri Matisse late-period paper cut-out style, bold flat shapes, 3-4 colors"
+category = "tshirt"
+tags = ["tshirt", "matisse", "print", "portrait", "cut-out", "Paris"]
+
+[variants]
+default = "portrait"
+
+[variants.portrait]
+prompt = """
+Create a T-shirt art design. 4:3 landscape format.
+
+This is a T-SHIRT PRINT design, not a greeting card. It must be screen-print ready.
+
+VISUAL LANGUAGE — Henri MATISSE late-period PAPER CUT-OUT style:
+- Matisse gouache-painted paper cut-outs (gouaches decoupees)
+- Bold, organic shapes CUT from flat colored paper — NO outlines, NO gradients
+- Think: "Jazz" series, "The Snail", "Blue Nudes", "Icarus"
+- Shapes are SIMPLIFIED to the absolute essence — human form in 3-5 cut shapes
+- Colors are FLAT and BOLD: deep blue, vermillion red, golden yellow, black, white
+- Maximum 3-4 colors per design — each shape is ONE solid color
+- Edges feel hand-cut with scissors — slightly irregular, organic, NOT perfect vector curves
+- The portrait should be recognizable but RADICALLY simplified into cut-paper shapes
+
+COMPOSITION:
+- The portrait is made of 5-10 bold flat shapes layered on white background
+- A small symbolic shape floats nearby — also cut-paper style
+- French text large and bold, Chinese text smaller below
+- Person's name small near the portrait
+- Generous white space — at least 40% empty
+
+CRITICAL CONSTRAINTS:
+- NO outlines, NO line work — ONLY flat cut shapes with organic edges
+- NO gradients, NO shading — each shape is one solid flat color
+- Shapes should feel like they were CUT WITH SCISSORS from painted paper
+- Maximum 4 colors total: blue, red/orange, black, white
+- Radical simplicity — "use the least to express the most"
+"""

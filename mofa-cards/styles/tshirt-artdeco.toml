@@ -1,0 +1,53 @@
+[meta]
+name = "tshirt-artdeco"
+display_name = "T-Shirt Art Deco"
+description = "1920s-30s French Art Deco, pure black on white, geometric portraits with minimal symbols"
+category = "tshirt"
+tags = ["tshirt", "art-deco", "print", "portrait", "black-white", "Paris"]
+
+[variants]
+default = "portrait"
+
+[variants.portrait]
+prompt = """
+Create a T-shirt art design. 4:3 landscape format.
+
+This is a T-SHIRT PRINT design, not a greeting card. It must be screen-print ready.
+
+VISUAL LANGUAGE — 1920s-30s French ART DECO:
+- Pure Art Deco aesthetic — geometric, streamlined, high contrast
+- Portraits are STYLIZED and GEOMETRIC: faces built from clean arcs, angular planes
+- Think: Tamara de Lempicka, A.M. Cassandre posters
+- Strong symmetry, bold black-and-white graphic contrast
+- Lines are SHARP, CLEAN, PRECISE
+
+PORTRAIT RULES:
+- Complete portrait — full head, neck and upper shoulders, NOT cropped
+- Face is GEOMETRIC: angular planes, almond eyes, flowing geometric hair
+- Portrait on the left, ~40% of canvas
+- Solid black fills for hair and deep shadows — high graphic contrast
+
+SYMBOLIC ELEMENT — EXTREMELY MINIMAL:
+- ONE single geometric symbol only — not a complex illustration
+- The symbol should be ABSTRACT and SYMBOLIC, like a logo or emblem
+- Maximum 5-8 lines/shapes total — radical simplicity
+- Think: a single Art Deco medallion, a lone geometric motif, an abstract glyph
+- It should feel like a brand mark or a philosophical sigil — not a diagram
+- Size: SMALL, roughly 10-15% of canvas — it punctuates the white space, not fills it
+
+BACKGROUND:
+- PURE WHITE. At least 50% empty.
+- The emptiness is powerful — let the portrait and symbol breathe
+
+TEXT:
+- French: large, Art Deco geometric serif or stylized capitals
+- Chinese: smaller, directly below
+- Person's name small, near the portrait
+- DO NOT repeat any text
+
+CRITICAL CONSTRAINTS:
+- Pure black on pure white — NO color, NO gray
+- The symbol must be RADICALLY SIMPLE — if in doubt, remove elements
+- The portrait carries the visual weight, the symbol is a quiet accent
+- The whole design should feel like a luxury 1920s Parisian poster with generous white space
+"""

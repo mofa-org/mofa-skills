@@ -1,0 +1,48 @@
+[meta]
+name = "tshirt-lautrec"
+display_name = "T-Shirt Toulouse-Lautrec"
+description = "Belle Epoque lithographic poster style, bold outlines, flat warm colors, cabaret energy"
+category = "tshirt"
+tags = ["tshirt", "lautrec", "print", "portrait", "poster", "Paris"]
+
+[variants]
+default = "portrait"
+
+[variants.portrait]
+prompt = """
+Create a T-shirt art design. 4:3 landscape format.
+
+This is a T-SHIRT PRINT design, not a greeting card. It must be screen-print ready.
+
+VISUAL LANGUAGE — TOULOUSE-LAUTREC lithographic poster style:
+- Henri de Toulouse-Lautrec lithographic poster aesthetic
+- BOLD flat color areas with strong BLACK outlines — like stone lithography
+- Limited flat colors: 3-4 max — warm ochre/cream, deep red, olive/dark green, black
+- Visible brushstroke texture within color areas — NOT perfectly smooth fills
+- Think: "Moulin Rouge: La Goulue", "Ambassadeurs: Aristide Bruant", "Jane Avril"
+- Figures are slightly caricatured — expressive, bold, exaggerated key features
+- Strong diagonal compositions, dynamic poses
+- Text integrated as part of the poster design — large, bold, slightly Art Nouveau curves
+
+PORTRAIT STYLE:
+- Bold black outline defines the face and figure
+- Flat color fills inside — skin as warm ochre, hair as solid black or dark
+- Slightly stylized/caricatured — emphasize distinctive features
+- The character should feel like they belong on a Belle Epoque cabaret poster
+- Complete portrait: full head to shoulders, not cropped
+
+COMPOSITION:
+- Portrait dominates, ~45% of canvas
+- A small symbolic element in the same lithographic style
+- Text feels like part of the poster — large, decorative, integrated
+- French text large and bold, Chinese text smaller
+- Person's name near the portrait
+- Background: flat warm color or white — poster-like
+
+CRITICAL CONSTRAINTS:
+- FLAT colors with BLACK outlines — the lithographic poster signature
+- Maximum 4 colors: black, cream/ochre, one warm color (red), one cool color (green/blue)
+- Slightly loose, expressive quality — NOT tight or precise
+- Should feel like a genuine Belle Epoque Parisian poster
+- Text should feel HAND-LETTERED — slightly organic, not digital
+"""

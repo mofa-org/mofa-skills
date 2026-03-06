@@ -1,0 +1,47 @@
+[meta]
+name = "tshirt-moebius"
+display_name = "T-Shirt Ligne Claire"
+description = "Moebius/Herge Ligne Claire style, uniform line weight, clean flat colors"
+category = "tshirt"
+tags = ["tshirt", "moebius", "ligne-claire", "print", "portrait", "Paris"]
+
+[variants]
+default = "portrait"
+
+[variants.portrait]
+prompt = """
+Create a T-shirt art design. 4:3 landscape format.
+
+This is a T-SHIRT PRINT design, not a greeting card. It must be screen-print ready.
+
+VISUAL LANGUAGE — LIGNE CLAIRE (Clear Line) style:
+- Franco-Belgian comics tradition — Herge (Tintin) meets Moebius (Jean Giraud)
+- UNIFORM LINE WEIGHT throughout — every line the same thickness, no variation
+- Clean, precise, BLACK outlines with flat color fills inside
+- NO crosshatching, NO stippling, NO shading lines — shadows expressed ONLY through flat color areas
+- Think: Tintin album covers, Moebius's "Arzach", Joost Swarte illustrations
+- Figures are realistic but slightly simplified — not caricatured, not photorealistic
+- Every shape is closed and filled with a single flat color
+- The clarity and precision is the beauty — "everything visible, nothing hidden"
+
+PORTRAIT STYLE:
+- Clean uniform-weight black outline defines the face, hair, clothing
+- Flat color fills: skin as warm tone, hair as solid shape, clothing as single color
+- Realistic proportions but simplified features — ligne claire elegance
+- Complete portrait: full head to shoulders, not cropped
+
+COMPOSITION:
+- Portrait on the left, ~40% of canvas
+- A small symbolic element in the same ligne claire style
+- French text in clean sans-serif or slightly rounded lettering
+- Chinese text smaller below
+- Person's name small near the portrait
+- Background: white or very light flat color — at least 40% empty
+
+CRITICAL CONSTRAINTS:
+- UNIFORM line weight — this is the defining feature of ligne claire
+- Flat colors ONLY — no gradients, no shading, no texture
+- Clean and precise — every line purposeful
+- Maximum 4-5 colors plus black and white
+- Print-ready: clean separation between all color areas
+"""
