@@ -3,6 +3,11 @@ node_modules/
 
 # Rust build artifacts
 mofa-cli/target/
+mofa-fm/target/
+
+# Generated example outputs
+research/
+site/
 
 # Generated outputs
 *.pptx

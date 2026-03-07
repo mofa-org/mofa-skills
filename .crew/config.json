@@ -1,0 +1,23 @@
+{
+  "provider": "openai",
+  "model": "gpt-4o",
+  "api_key_env": "OPENAI_API_KEY",
+  "max_iterations": 50,
+  "sub_providers": [
+    {
+      "key": "cheap",
+      "provider": "gemini",
+      "model": "gemini-2.5-flash",
+      "api_key_env": "GEMINI_API_KEY",
+      "description": "Fast and cheap. Use for search, file reading, and lightweight tasks.",
+      "default_context_window": 32000
+    },
+    {
+      "key": "strong",
+      "provider": "openai",
+      "model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY",
+      "description": "Strong general-purpose model for code generation and planning."
+    }
+  ]
+}
