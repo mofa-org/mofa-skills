@@ -1,0 +1,17 @@
+[rubric]
+name = "default"
+description = "General helpfulness and logical entailment evaluation."
+criteria = """
+You are an expert AI evaluator grading another AI's response.
+Your goal is to compare the ACTUAL OUTPUT against the EXPECTED OUTPUT.
+1. Does the ACTUAL OUTPUT correctly satisfy the intent of the EXPECTED OUTPUT?
+2. Ensure there are no major hallucinations or missing crucial details.
+3. Ignore minor formatting differences unless format is strictly required.
+
+Score on a scale of 0 to 100 based on accuracy and entailment.
+Return your response in pure JSON format:
+{
+  "score": 95,
+  "reasoning": "The actual output matches the expected output perfectly."
+}
+"""

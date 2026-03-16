@@ -1,0 +1,104 @@
+{
+  "name": "mofa-agent-swarm",
+  "version": "1.0.0",
+  "author": "ashum9",
+  "description": "Multi-agent swarm orchestrator skill for spawning, monitoring, and delegating tasks to sub-agents with SQLite state persistence.",
+  "type": "orchestration",
+  "timeout_secs": 120,
+  "requires_network": true,
+  "tools": [
+    {
+      "name": "spawn_agent",
+      "description": "Initialize a new sub-agent in the swarm with a designated role and system prompt. Returns the new agent's UUID for future coordination.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "The assigned role or job title for this agent (e.g. 'research_agent', 'writer_agent')."
+          },
+          "system_prompt": {
+            "type": "string",
+            "description": "The system prompt instilling instruction and boundaries for this particular agent."
+          },
+          "max_concurrent_tasks": {
+            "type": "integer",
+            "description": "The maximum number of tasks the agent can handle simultaneously. Defaults to 5.",
+            "default": 5
+          }
+        },
+        "required": ["role", "system_prompt"]
+      }
+    },
+    {
+      "name": "monitor_swarm",
+      "description": "Retrieve the real-time operational status (Active, Idle, Failed, Stopped) of all agents currently managed by the orchestrator.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "roles_filter": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optional array of roles to filter the swarm status report."
+          }
+        }
+      }
+    },
+    {
+      "name": "send_task",
+      "description": "Dispatches a specific, actionable task to a target agent by UUID. The task is queued for execution.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The unique UUID of the target agent returned by spawn_agent."
+          },
+          "task_payload": {
+            "type": "string",
+            "description": "The JSON or text description of the task to be completed."
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Task priority level from 1 (lowest) to 10 (highest).",
+            "default": 5
+          }
+        },
+        "required": ["agent_id", "task_payload"]
+      }
+    },
+    {
+      "name": "collect_results",
+      "description": "Checks for completed tasks and retrieves the results produced by the specified agent.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The unique UUID of the agent whose completed tasks you want to retrieve."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of task results to retrieve.",
+            "default": 10
+          }
+        },
+        "required": ["agent_id"]
+      }
+    },
+    {
+      "name": "shutdown_agent",
+      "description": "Gracefully shutdown a sub-agent. This cancels all pending tasks for this agent and removes its active memory footprint.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The active UUID of the agent to shutdown."
+          }
+        },
+        "required": ["agent_id"]
+      }
+    }
+  ]
+}
