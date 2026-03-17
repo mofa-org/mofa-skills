@@ -1,0 +1,64 @@
+digraph PosterArchitecture {
+    graph [label="MoFA Poster Generator Architecture", fontsize=14, fontname="Helvetica"]
+    node [shape=box, fontname="Helvetica", fontsize=10]
+    edge [fontname="Helvetica", fontsize=9]
+
+    // Inputs
+    User [label="User Request\n生成海报", shape=ellipse, fillcolor=lightblue, style=filled]
+
+    // Content Extraction
+    Extract [label="内容提取\n• LaTeX 解析\n• WebFetch 抓图", fillcolor=lightyellow, style=filled]
+    Overleaf [label="overleaf/\n论文源码", shape=folder, fillcolor=lightcyan, style=filled]
+    Website [label="项目网站\n图片/链接", shape=cylinder, fillcolor=lightcyan, style=filled]
+    Reference [label="references/\n参考海报", shape=folder, fillcolor=lightgray, style=filled]
+
+    // Asset Preparation
+    Assets [label="资源准备\n• PDF转PNG\n• 下载图片\n• 生成二维码", fillcolor=lightgreen, style=filled]
+    PDF2PNG [label="sips -Z 3000\n高分辨率转换", shape=note, fillcolor=lightyellow, style=filled]
+    AspectRatio [label="测量宽高比\n优化布局", shape=note, fillcolor=lightyellow, style=filled]
+
+    // Layout Optimization
+    Layout [label="布局优化\n• 宽高比匹配\n• 空白最小化", fillcolor=lightyellow, style=filled]
+    Playwright [label="Playwright\n自动测量", shape=hexagon, fillcolor=lightsalmon, style=filled]
+
+    // Poster Generation
+    Generate [label="生成海报\nReact + CDN", fillcolor=lightcyan, style=filled]
+    HTML [label="index.html\n交互式编辑器", fillcolor=lightpink, style=filled]
+    Config [label="poster-config.json\n布局配置", fillcolor=lightpink, style=filled]
+
+    // Interactive Editor
+    Editor [label="交互编辑器\n• 拖拽调整\n• 字体缩放\n• 卡片交换", fillcolor=lightgreen, style=filled]
+    Drag [label="拖拽分隔线", shape=note, fillcolor=lightyellow, style=filled]
+    Swap [label="点击交换卡片", shape=note, fillcolor=lightyellow, style=filled]
+
+    // Output
+    PDF [label="poster.pdf\n打印输出", fillcolor=lightpink, style=filled]
+    Output [label="最终海报", shape=ellipse, fillcolor=lightblue, style=filled]
+
+    // Edges
+    User -> Extract
+
+    Overleaf -> Extract
+    Website -> Extract
+    Reference -> Extract [style=dashed, color=gray]
+
+    Extract -> Assets
+    Assets -> PDF2PNG [style=dashed, color=gray]
+    Assets -> AspectRatio [style=dashed, color=gray]
+
+    Assets -> Layout
+    Layout -> Playwright [style=dashed, color=red]
+    Playwright -> Layout [label="优化参数"]
+
+    Layout -> Generate
+    Generate -> HTML
+    Generate -> Config
+
+    HTML -> Editor
+    Editor -> Drag [style=dashed, color=gray]
+    Editor -> Swap [style=dashed, color=gray]
+
+    Editor -> PDF [label="Playwright 导出"]
+    HTML -> Output
+    PDF -> Output
+}

@@ -1,0 +1,16 @@
+# Poster output directory (generated)
+poster/
+
+# Overleaf source (user should clone)
+overleaf/
+
+# References (user should add)
+references/
+
+# Python
+__pycache__/
+*.pyc
+
+# System files
+.DS_Store
+*.log
