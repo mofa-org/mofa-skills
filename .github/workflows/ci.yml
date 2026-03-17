@@ -36,12 +36,12 @@ jobs:
       - name: Generate registry.json
         run: python3 scripts/gen-registry.py --write
 
-      - name: Push to skill-registry
+      - name: Push to octos-hub
         env:
-          REGISTRY_TOKEN: ${{ secrets.SKILL_REGISTRY_TOKEN }}
+          REGISTRY_TOKEN: ${{ secrets.OCTOS_HUB_TOKEN }}
         run: |
           set -e
-          REGISTRY_REPO="hagency-org/skill-registry"
+          REGISTRY_REPO="octos-org/octos-hub"
           BRANCH="main"
           FILE="registry.json"
 

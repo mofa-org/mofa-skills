@@ -191,14 +191,14 @@ All model names are configurable in `mofa/config.json`.
 
 ## Skill Registry
 
-The [skill-registry](https://github.com/hagency-org/skill-registry) is automatically synced on every push to `main` after CI passes.
+The [octos-hub](https://github.com/octos-org/octos-hub) is automatically synced on every push to `main` after CI passes.
 
 ### How it works
 
 1. `scripts/gen-registry.py` scans all `mofa-*/` directories for `manifest.json` or `SKILL.md`
 2. Collects skill names, binary requirements (`requires.bins` from manifests)
 3. Merges with curated metadata from `registry-meta.json` (tags, description, excludes)
-4. The `sync-registry` CI job pushes the generated `registry.json` to `hagency-org/skill-registry` via GitHub API
+4. The `sync-registry` CI job pushes the generated `registry.json` to `octos-org/octos-hub` via GitHub API
 
 ### Adding/removing skills
 
@@ -209,7 +209,7 @@ The [skill-registry](https://github.com/hagency-org/skill-registry) is automatic
 
 ### Setup (repo admin)
 
-Add a `SKILL_REGISTRY_TOKEN` secret to this repo — a GitHub PAT with `repo` scope for `hagency-org/skill-registry`.
+Add a `OCTOS_HUB_TOKEN` secret to this repo — a GitHub PAT with `repo` scope for `octos-org/octos-hub`.
 
 ## License
 
