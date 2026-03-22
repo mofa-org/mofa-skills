@@ -330,6 +330,23 @@ fn plugin_slides(
         .ok_or_else(|| eyre::eyre!("missing 'slides' array"))?;
     let mut slides: Vec<pipeline::slides::SlideInput> = serde_json::from_value(slides_json.clone())?;
 
+    // Relocate embedded file paths (source_image, images, overlay_images) for per-profile isolation
+    for slide in &mut slides {
+        if let Some(ref src) = slide.source_image {
+            slide.source_image = Some(relocate_path(std::path::Path::new(src)).to_string_lossy().to_string());
+        }
+        if let Some(ref mut imgs) = slide.images {
+            for img in imgs.iter_mut() {
+                *img = relocate_path(std::path::Path::new(img)).to_string_lossy().to_string();
+            }
+        }
+        if let Some(ref mut overlays) = slide.overlay_images {
+            for ov in overlays.iter_mut() {
+                ov.path = relocate_path(std::path::Path::new(&ov.path)).to_string_lossy().to_string();
+            }
+        }
+    }
+
     if auto_layout {
         for slide in &mut slides {
             slide.auto_layout = true;

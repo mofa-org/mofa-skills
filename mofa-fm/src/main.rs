@@ -134,8 +134,8 @@ fn ominix_base_url() -> String {
 fn http_client() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(30))
-        .timeout(Duration::from_secs(300)) // 5 min — clone with sentence chunking can take 60s+
-        .tcp_keepalive(Duration::from_secs(15)) // prevent OS from killing idle TCP connections
+        // No request timeout — clone with sentence chunking can take 5+ min for long text.
+        .tcp_keepalive(Duration::from_secs(15))
         .build()
         .expect("failed to build HTTP client")
 }
@@ -372,22 +372,42 @@ fn handle_tts(input_json: &str) {
         reg.default_voice.unwrap_or_else(|| "vivian".to_string())
     });
 
-    let (endpoint, body) = if let Some(ref_path) = resolve_custom_voice(&voice_name) {
-        // Custom voice → /v1/audio/tts/clone (Base model, x-vector voice cloning)
-        let mut body = json!({
-            "input": input.text,
-            "reference_audio": ref_path.to_string_lossy(),
-            "language": language
-        });
-        if let Some(ref prompt) = input.prompt {
-            body["prompt"] = json!(prompt);
-        }
+    let wav_bytes = if let Some(ref_path) = resolve_custom_voice(&voice_name) {
+        // Custom voice → /v1/audio/tts/clone (multipart with raw WAV)
+        let ref_bytes = match std::fs::read(&ref_path) {
+            Ok(b) => b,
+            Err(e) => fail(&format!("Failed to read voice '{}': {e}", voice_name)),
+        };
+        use reqwest::blocking::multipart::{Form, Part};
+        let mut form = Form::new()
+            .text("input", input.text.clone())
+            .text("language", language.clone())
+            .part(
+                "reference_audio",
+                Part::bytes(ref_bytes)
+                    .file_name("ref.wav")
+                    .mime_str("audio/wav")
+                    .unwrap(),
+            );
         if let Some(speed) = input.speed {
-            body["speed"] = json!(speed);
+            form = form.text("speed", speed.to_string());
         }
-        (format!("{base_url}/v1/audio/tts/clone?format=wav"), body)
+        let endpoint = format!("{base_url}/v1/audio/tts/clone?format=wav");
+        let resp = match client.post(&endpoint).multipart(form).send() {
+            Ok(r) => r,
+            Err(e) => fail(&format!("Clone request failed: {e}")),
+        };
+        let status = resp.status();
+        if !status.is_success() {
+            let t = resp.text().unwrap_or_default();
+            fail(&format!("Clone error (HTTP {status}): {}", truncate(&t, 200)));
+        }
+        match resp.bytes() {
+            Ok(b) => b.to_vec(),
+            Err(e) => fail(&format!("Failed to read clone response: {e}")),
+        }
     } else {
-        // Preset voice → /v1/audio/tts/qwen3 (CustomVoice model)
+        // Preset voice → /v1/audio/tts/qwen3 (JSON)
         let mut body = json!({
             "input": input.text,
             "voice": voice_name,
@@ -399,12 +419,11 @@ fn handle_tts(input_json: &str) {
         if let Some(speed) = input.speed {
             body["speed"] = json!(speed);
         }
-        (format!("{base_url}/v1/audio/tts/qwen3?format=wav"), body)
-    };
-
-    let wav_bytes = match fetch_tts_wav(&client, &endpoint, &body) {
-        Ok(b) => b,
-        Err(e) => fail(&e),
+        let endpoint = format!("{base_url}/v1/audio/tts/qwen3?format=wav");
+        match fetch_tts_wav(&client, &endpoint, &body) {
+            Ok(b) => b,
+            Err(e) => fail(&e),
+        }
     };
 
     if let Err(e) = std::fs::write(&output_path, &wav_bytes) {
