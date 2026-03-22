@@ -137,18 +137,18 @@ impl DashscopeClient {
     ) -> Result<std::path::PathBuf> {
         let model = model.unwrap_or(DEFAULT_EDIT_MODEL);
 
-        // Resize large images to reduce payload
+        // Resize large images to reduce payload, remember original size for upscale
         let img = image::ImageReader::open(image_path)?
             .with_guessed_format()?
             .decode()?;
-        let img = if img.width() > 2048 {
-            let scale = 2048.0 / img.width() as f64;
-            let new_h = (img.height() as f64 * scale) as u32;
+        let orig_w = img.width();
+        let orig_h = img.height();
+        let img = if orig_w > 2048 {
+            let scale = 2048.0 / orig_w as f64;
+            let new_h = (orig_h as f64 * scale) as u32;
             eprintln!(
                 "  Dashscope: resizing {}x{} → 2048x{} for upload",
-                img.width(),
-                img.height(),
-                new_h
+                orig_w, orig_h, new_h
             );
             img.resize_exact(2048, new_h, image::imageops::FilterType::Lanczos3)
         } else {
@@ -220,7 +220,25 @@ impl DashscopeClient {
                 .and_then(|u| u.as_str())
                 .ok_or_else(|| eyre::eyre!("Dashscope edit failed: {data}"))?;
 
-            return self.download_result(img_url, out_file);
+            let path = self.download_result(img_url, out_file)?;
+
+            // Upscale back to original resolution if we downscaled
+            if orig_w > 2048 {
+                eprintln!(
+                    "  Dashscope: upscaling back to {}x{}",
+                    orig_w, orig_h
+                );
+                let result_img = image::ImageReader::open(&path)?
+                    .with_guessed_format()?
+                    .decode()?;
+                let upscaled = result_img.resize_exact(
+                    orig_w, orig_h,
+                    image::imageops::FilterType::Lanczos3,
+                );
+                upscaled.save(&path)?;
+            }
+
+            return Ok(path);
         }
         Err(eyre::eyre!("Dashscope rate limited after {max_retries} retries"))
     }
@@ -378,6 +396,79 @@ impl DashscopeClient {
             words.len()
         );
         Ok(out_file.to_path_buf())
+    }
+
+    /// Generate an image from a text prompt using Qwen-Image (text-to-image).
+    pub fn gen_image(
+        &self,
+        prompt: &str,
+        out_file: &Path,
+        model: Option<&str>,
+        size: Option<&str>,
+    ) -> Result<std::path::PathBuf> {
+        let model = model.unwrap_or("qwen-image-2.0-pro");
+
+        // Determine size string (width*height) from mofa size notation
+        let size_str = match size {
+            Some("4K") => "2048*1152",  // 16:9 max for qwen
+            Some("2K") => "1344*768",
+            Some("1K") => "1024*576",
+            _ => "1344*768",
+        };
+
+        let body = json!({
+            "model": model,
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            { "text": prompt }
+                        ]
+                    }
+                ]
+            },
+            "parameters": {
+                "n": 1,
+                "watermark": false,
+                "prompt_extend": false,
+                "size": size_str
+            }
+        });
+
+        let max_retries = 3;
+        for attempt in 0..=max_retries {
+            eprintln!("  Dashscope gen [{model}]: submitting...");
+
+            let resp = self
+                .http
+                .post(&self.endpoint)
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()?;
+
+            let data: serde_json::Value = resp.json()?;
+
+            if let Some(code) = data.get("code").and_then(|c| c.as_str()) {
+                if (code.contains("RateQuota") || code.contains("Throttling"))
+                    && attempt < max_retries
+                {
+                    let wait = 10 * (attempt + 1) as u64;
+                    eprintln!("  Dashscope gen: rate limited, retrying in {wait}s...");
+                    std::thread::sleep(std::time::Duration::from_secs(wait));
+                    continue;
+                }
+            }
+
+            let img_url = data
+                .pointer("/output/choices/0/message/content/0/image")
+                .and_then(|u| u.as_str())
+                .ok_or_else(|| eyre::eyre!("Dashscope gen failed: {data}"))?;
+
+            return self.download_result(img_url, out_file);
+        }
+        Err(eyre::eyre!("Dashscope gen rate limited after {max_retries} retries"))
     }
 
     fn download_result(&self, img_url: &str, out_file: &Path) -> Result<std::path::PathBuf> {

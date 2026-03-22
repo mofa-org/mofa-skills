@@ -15,6 +15,39 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+/// Route image generation to Gemini or Dashscope based on model name.
+/// Models starting with "qwen-image" go to Dashscope, everything else to Gemini.
+fn generate_image(
+    gemini: &GeminiClient,
+    dashscope: &Option<DashscopeClient>,
+    prompt: &str,
+    out_file: &Path,
+    image_size: Option<&str>,
+    ref_images: &[&Path],
+    model: &str,
+    label: &str,
+) -> Option<PathBuf> {
+    // Check cache
+    if out_file.exists() && out_file.metadata().map(|m| m.len() > 10_000).unwrap_or(false) {
+        eprintln!("Cached: {label}");
+        return Some(out_file.to_path_buf());
+    }
+
+    if model.starts_with("qwen-image") {
+        if let Some(ref ds) = dashscope {
+            match ds.gen_image(prompt, out_file, Some(model), image_size) {
+                Ok(p) => return Some(p),
+                Err(e) => eprintln!("{label}: Dashscope gen failed ({e}), falling back to Gemini"),
+            }
+        }
+    }
+
+    // Gemini path (default or fallback)
+    gemini.gen_image(prompt, out_file, image_size, Some("16:9"), ref_images, Some(model), Some(label))
+        .ok()
+        .flatten()
+}
+
 /// Input slide definition (from JSON).
 #[derive(Deserialize, Debug)]
 pub struct SlideInput {
@@ -65,6 +98,9 @@ fn run_slides_sync(
 
     pool.scope(|s| {
         for (idx, slide) in slides.iter().enumerate() {
+            let gemini = gemini;
+            let dashscope = dashscope;
+            let ocr_client = ocr_client;
             let ref_paths = Arc::clone(&ref_paths);
             let extracted_texts = Arc::clone(&extracted_texts);
             let direct_paths = Arc::clone(&direct_paths);
@@ -96,10 +132,10 @@ fn run_slides_sync(
                     } else {
                         let full_prompt = format!("{prefix}\n\n{}", slide.prompt);
                         let ref_size = ref_image_size.or(image_size);
-                        matches!(
-                            gemini.gen_image(&full_prompt, &ref_file, ref_size, Some("16:9"), &ref_images, Some(model), Some(&format!("Slide {} (ref)", idx + 1))),
-                            Ok(Some(_))
-                        )
+                        generate_image(
+                            gemini, dashscope, &full_prompt, &ref_file, ref_size,
+                            &ref_images, model, &format!("Slide {} (ref)", idx + 1),
+                        ).is_some()
                     };
 
                     if ref_ready {
@@ -129,7 +165,7 @@ fn run_slides_sync(
                         full_prompt.push_str(NO_TEXT_INSTRUCTION);
                     }
                     let out_path = slide_dir.join(format!("slide-{padded}.png"));
-                    if let Ok(Some(p)) = gemini.gen_image(&full_prompt, &out_path, image_size, Some("16:9"), &ref_images, Some(model), Some(&format!("Slide {}", idx + 1))) {
+                    if let Some(p) = generate_image(gemini, dashscope, &full_prompt, &out_path, image_size, &ref_images, model, &format!("Slide {}", idx + 1)) {
                         direct_paths.lock().unwrap()[idx] = Some(p);
                     }
                 }
@@ -151,19 +187,11 @@ fn run_slides_sync(
         let padded = format!("{:02}", idx + 1);
         let out_path = slide_dir.join(format!("slide-{padded}.png"));
 
-        let text_removal_prompt = "Remove all readable text from this image. Replace text areas with the surrounding background. Keep all non-text visual elements exactly as they are — preserve all illustrations, wireframes, charts, icons, shapes, lines, and graphical elements. Only remove text.";
-
-        let removed = if let Some(ref ds) = dashscope {
-            ds.refine_image(ref_path, text_removal_prompt, &out_path, Some(cfg.edit_model())).ok()
-        } else {
-            None
-        };
-        let removed = removed.or_else(|| {
-            let model = slides[idx].gen_model.as_deref().or(gen_model).unwrap_or(cfg.gen_model());
-            gemini.edit_image(ref_path, text_removal_prompt, &out_path, Some(model), Some(&format!("Slide {} (text-rm)", idx + 1))).ok().flatten()
-        });
-        if let Some(p) = removed {
-            final_paths[idx] = Some(p);
+        if let Some(ref ds) = dashscope {
+            match ds.refine_image(ref_path, "Remove all readable text, numbers, and punctuation from this image. Replace removed text with surrounding background. Keep all non-text elements.", &out_path, Some(cfg.edit_model())) {
+                Ok(p) => final_paths[idx] = Some(p),
+                Err(e) => eprintln!("Slide {}: Qwen-Edit failed ({e})", idx + 1),
+            }
         }
     }
 
@@ -394,21 +422,18 @@ pub fn run(
             let padded = format!("{:02}", idx + 1);
             let out_path = slide_dir.join(format!("slide-{padded}.png"));
 
-            let text_removal_prompt = "Remove all readable text from this image. Replace text areas with the surrounding background. Keep all non-text visual elements exactly as they are — preserve all illustrations, wireframes, charts, icons, shapes, lines, and graphical elements. Only remove text.";
-
-            let removed = if let Some(ref ds) = dashscope {
+            if let Some(ref ds) = dashscope {
                 eprintln!("Slide {}: removing text with Qwen-Edit...", idx + 1);
-                ds.refine_image(ref_path, text_removal_prompt, &out_path, Some(cfg.edit_model())).ok()
-            } else {
-                None
-            };
-            let removed = removed.or_else(|| {
-                eprintln!("Slide {}: removing text with Gemini edit...", idx + 1);
-                let model = slides[idx].gen_model.as_deref().or(gen_model).unwrap_or(cfg.gen_model());
-                gemini.edit_image(ref_path, text_removal_prompt, &out_path, Some(model), Some(&format!("Slide {} (text-rm)", idx + 1))).ok().flatten()
-            });
-            if let Some(p) = removed {
-                final_paths[idx] = Some(p);
+                match ds.refine_image(
+                    ref_path,
+                    "Remove all readable text, numbers, and punctuation from this image. \
+                     Replace removed text with surrounding background. Keep all non-text elements.",
+                    &out_path,
+                    Some(cfg.edit_model()),
+                ) {
+                    Ok(p) => final_paths[idx] = Some(p),
+                    Err(e) => eprintln!("Slide {}: Qwen-Edit failed ({e})", idx + 1),
+                }
             }
         }
 
@@ -448,6 +473,7 @@ pub fn run(
     pool.scope(|s| {
         for (idx, slide) in slides.iter().enumerate() {
             let gemini = &gemini;
+            let dashscope = &dashscope;
             let ocr_client = &ocr_client;
             let ref_paths = Arc::clone(&ref_paths);
             let extracted_texts = Arc::clone(&extracted_texts);
@@ -492,18 +518,10 @@ pub fn run(
                         // Generate WITH text (reference image)
                         let full_prompt = format!("{prefix}\n\n{}", slide.prompt);
                         let ref_size = ref_image_size.or(image_size);
-                        matches!(
-                            gemini.gen_image(
-                                &full_prompt,
-                                &ref_file,
-                                ref_size,
-                                Some("16:9"),
-                                &ref_images,
-                                Some(model),
-                                Some(&format!("Slide {} (ref)", idx + 1)),
-                            ),
-                            Ok(Some(_))
-                        )
+                        generate_image(
+                            gemini, dashscope, &full_prompt, &ref_file, ref_size,
+                            &ref_images, model, &format!("Slide {} (ref)", idx + 1),
+                        ).is_some()
                     };
 
                     if ref_ready {
@@ -592,14 +610,9 @@ pub fn run(
                     }
 
                     let out_path = slide_dir.join(format!("slide-{padded}.png"));
-                    if let Ok(Some(p)) = gemini.gen_image(
-                        &full_prompt,
-                        &out_path,
-                        image_size,
-                        Some("16:9"),
-                        &ref_images,
-                        Some(model),
-                        Some(&format!("Slide {}", idx + 1)),
+                    if let Some(p) = generate_image(
+                        gemini, dashscope, &full_prompt, &out_path, image_size,
+                        &ref_images, model, &format!("Slide {}", idx + 1),
                     ) {
                         direct_paths.lock().unwrap()[idx] = Some(p);
                     }
@@ -626,38 +639,19 @@ pub fn run(
         let padded = format!("{:02}", idx + 1);
         let out_path = slide_dir.join(format!("slide-{padded}.png"));
 
-        // Text removal: try Qwen-Edit first, fall back to Gemini edit
         let text_removal_prompt = "Remove all readable text from this image. Replace text areas with the surrounding background. Keep all non-text visual elements exactly as they are — preserve all illustrations, wireframes, charts, icons, shapes, lines, and graphical elements. Only remove text.";
 
         let removed = if let Some(ref ds) = dashscope {
             eprintln!("Slide {}: removing text with Qwen-Edit...", idx + 1);
-            match ds.refine_image(ref_path, text_removal_prompt, &out_path, Some(cfg.edit_model())) {
-                Ok(p) => Some(p),
-                Err(e) => {
-                    eprintln!("Slide {}: Qwen-Edit failed ({e}), trying Gemini edit...", idx + 1);
-                    None
-                }
-            }
+            ds.refine_image(ref_path, text_removal_prompt, &out_path, Some(cfg.edit_model())).ok()
         } else {
             None
         };
-
         let removed = removed.or_else(|| {
             eprintln!("Slide {}: removing text with Gemini edit...", idx + 1);
             let model = slides[idx].gen_model.as_deref().or(gen_model).unwrap_or(cfg.gen_model());
-            match gemini.edit_image(
-                ref_path,
-                text_removal_prompt,
-                &out_path,
-                Some(model),
-                Some(&format!("Slide {} (text-rm)", idx + 1)),
-            ) {
-                Ok(Some(p)) => Some(p),
-                Ok(None) => { eprintln!("Slide {}: Gemini edit returned no image", idx + 1); None }
-                Err(e) => { eprintln!("Slide {}: Gemini edit failed ({e})", idx + 1); None }
-            }
+            gemini.edit_image(ref_path, text_removal_prompt, &out_path, Some(model), Some(&format!("Slide {} (text-rm)", idx + 1))).ok().flatten()
         });
-
         if let Some(p) = removed {
             final_paths[idx] = Some(p);
         }

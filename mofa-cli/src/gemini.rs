@@ -204,7 +204,6 @@ impl GeminiClient {
     }
 
     /// Edit an existing image: send image + text prompt, get modified image back.
-    /// Used for text removal: pass a slide image and ask Gemini to erase all text.
     pub fn edit_image(
         &self,
         image_path: &Path,
@@ -221,7 +220,6 @@ impl GeminiClient {
             return Ok(Some(out_file.to_path_buf()));
         }
 
-        // Read source image as base64
         let img_data = std::fs::read(image_path)?;
         let ext = image_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
         let mime = if ext == "jpg" || ext == "jpeg" { "image/jpeg" } else { "image/png" };
@@ -233,12 +231,7 @@ impl GeminiClient {
         ];
 
         let config = json!({ "responseModalities": ["IMAGE", "TEXT"] });
-
-        let url = format!(
-            "{}/models/{model}:generateContent?key={}",
-            self.base_url, self.api_key
-        );
-
+        let url = format!("{}/models/{model}:generateContent?key={}", self.base_url, self.api_key);
         let body = json!({
             "contents": [{ "role": "user", "parts": parts }],
             "generationConfig": config,
@@ -248,10 +241,7 @@ impl GeminiClient {
             match self.http.post(&url).json(&body).send() {
                 Ok(resp) => {
                     if let Ok(data) = resp.json::<Value>() {
-                        if let Some(parts) = data
-                            .pointer("/candidates/0/content/parts")
-                            .and_then(|p| p.as_array())
-                        {
+                        if let Some(parts) = data.pointer("/candidates/0/content/parts").and_then(|p| p.as_array()) {
                             if let Some(bytes) = extract_image_from_parts(parts) {
                                 if let Some(parent) = out_file.parent() {
                                     std::fs::create_dir_all(parent).ok();

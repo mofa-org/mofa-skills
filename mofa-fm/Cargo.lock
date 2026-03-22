@@ -435,6 +435,7 @@ dependencies = [
 name = "mofa-fm"
 version = "1.0.0"
 dependencies = [
+ "base64",
  "reqwest",
  "serde",
  "serde_json",
