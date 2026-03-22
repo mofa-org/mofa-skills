@@ -111,35 +111,29 @@ fn is_preset(name: &str) -> bool {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-/// Resolve the base URL for a specific TTS service.
-/// In the 3-process architecture each model type runs on its own port:
-///   - OMINIX_TTS_URL     (preset voices, CustomVoice model, default :8082)
-///   - OMINIX_CLONE_URL   (voice cloning, Base model, default :8083)
-/// Falls back to OMINIX_API_URL or http://localhost:8080 for single-process setups.
-fn tts_url() -> String {
-    std::env::var("OMINIX_TTS_URL")
-        .unwrap_or_else(|_| "http://localhost:8082".to_string())
-        .trim_end_matches('/')
-        .to_string()
-}
-
-fn clone_url() -> String {
-    std::env::var("OMINIX_CLONE_URL")
-        .unwrap_or_else(|_| "http://localhost:8083".to_string())
-        .trim_end_matches('/')
-        .to_string()
-}
-
-fn health_url() -> String {
-    std::env::var("OMINIX_ASR_URL")
-        .unwrap_or_else(|_| "http://localhost:8081".to_string())
-        .trim_end_matches('/')
-        .to_string()
+/// Resolve the ominix API base URL. Checks in order:
+///   1. OMINIX_API_URL env var
+///   2. ~/.ominix/api_url discovery file
+///   3. Default http://localhost:9090
+fn ominix_base_url() -> String {
+    if let Ok(url) = std::env::var("OMINIX_API_URL") {
+        return url.trim_end_matches('/').to_string();
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let discovery = Path::new(&home).join(".ominix").join("api_url");
+        if let Ok(url) = std::fs::read_to_string(&discovery) {
+            let url = url.trim();
+            if !url.is_empty() {
+                return url.trim_end_matches('/').to_string();
+            }
+        }
+    }
+    "http://localhost:9090".to_string()
 }
 
 fn http_client() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
-        .connect_timeout(Duration::from_secs(5))
+        .connect_timeout(Duration::from_secs(30))
         .timeout(Duration::from_secs(300)) // 5 min — clone with sentence chunking can take 60s+
         .tcp_keepalive(Duration::from_secs(15)) // prevent OS from killing idle TCP connections
         .build()
@@ -342,13 +336,24 @@ fn handle_tts(input_json: &str) {
     }
 
     let client = http_client();
-    if let Err(e) = check_health(&client, &health_url()) {
+    let base_url = ominix_base_url();
+    if let Err(e) = check_health(&client, &base_url) {
         fail(&e);
     }
 
-    let output_path = input
-        .output_path
-        .unwrap_or_else(|| format!("/tmp/crew_fm_tts_{}.wav", timestamp()));
+    // Save to OCTOS_WORK_DIR (inside profile data_dir) so send_file can access it
+    let output_path = input.output_path.unwrap_or_else(|| {
+        let filename = format!("fm_tts_{}.wav", timestamp());
+        if let Ok(work_dir) = std::env::var("OCTOS_WORK_DIR") {
+            let dir = Path::new(&work_dir);
+            let _ = std::fs::create_dir_all(dir);
+            return dir.join(&filename).to_string_lossy().to_string();
+        }
+        match std::env::current_dir() {
+            Ok(dir) => dir.join(&filename).to_string_lossy().to_string(),
+            Err(_) => format!("/tmp/{filename}"),
+        }
+    });
 
     if let Some(parent) = Path::new(&output_path).parent() {
         if !parent.exists() {
@@ -368,7 +373,7 @@ fn handle_tts(input_json: &str) {
     });
 
     let (endpoint, body) = if let Some(ref_path) = resolve_custom_voice(&voice_name) {
-        // Custom voice → clone port directly (Base model)
+        // Custom voice → /v1/audio/tts/clone (Base model, x-vector voice cloning)
         let mut body = json!({
             "input": input.text,
             "reference_audio": ref_path.to_string_lossy(),
@@ -380,9 +385,9 @@ fn handle_tts(input_json: &str) {
         if let Some(speed) = input.speed {
             body["speed"] = json!(speed);
         }
-        (format!("{}/v1/audio/speech/clone", clone_url()), body)
+        (format!("{base_url}/v1/audio/tts/clone?format=wav"), body)
     } else {
-        // Preset voice → TTS port directly (CustomVoice model)
+        // Preset voice → /v1/audio/tts/qwen3 (CustomVoice model)
         let mut body = json!({
             "input": input.text,
             "voice": voice_name,
@@ -394,7 +399,7 @@ fn handle_tts(input_json: &str) {
         if let Some(speed) = input.speed {
             body["speed"] = json!(speed);
         }
-        (format!("{}/v1/audio/speech", tts_url()), body)
+        (format!("{base_url}/v1/audio/tts/qwen3?format=wav"), body)
     };
 
     let wav_bytes = match fetch_tts_wav(&client, &endpoint, &body) {

@@ -71,15 +71,15 @@ Or run the setup script: `./scripts/setup.sh`
 
 ## Configuration
 
-Set `OMINIX_TTS_URL` and `OMINIX_CLONE_URL` for custom ports (defaults: `http://localhost:8082`, `http://localhost:8083`).
+Set `OMINIX_API_URL` for a custom server URL (default: auto-discovered from `~/.ominix/api_url` or `http://localhost:9090`).
 Set `CREW_DATA_DIR` for per-profile voice storage (set automatically by crew gateway).
 
 ## API Endpoints
 
-Two separate ominix-api endpoints are used:
+Model-specific ominix-api endpoints:
 
-- **Preset voices** → `POST /v1/audio/speech` (uses CustomVoice model)
-- **Custom/cloned voices** → `POST /v1/audio/speech/clone` (uses Base model with ECAPA-TDNN)
+- **Preset voices** → `POST /v1/audio/tts/qwen3?format=wav` (Qwen3-TTS CustomVoice model)
+- **Custom/cloned voices** → `POST /v1/audio/tts/clone?format=wav` (Qwen3-TTS Base model with ECAPA-TDNN x-vector)
 
 The plugin automatically routes to the correct endpoint based on the voice name.
 
@@ -94,10 +94,8 @@ The plugin auto-detects the response format:
 
 ### Concurrency
 
-The ominix-api inference thread is single-threaded (MLX models are not `Send`/`Sync`). Concurrent TTS requests queue sequentially. For production:
-
-- Run separate ominix-api instances for ASR and TTS on different ports
-- Point `OMINIX_API_URL` to the TTS instance for this skill
+TTS requests run on a dedicated TTS pool thread, separate from the main inference thread (LLM/ASR/image).
+Concurrent TTS and ASR requests do not block each other. Multiple TTS requests queue sequentially within the TTS pool (MLX limitation).
 
 ## Tools
 
