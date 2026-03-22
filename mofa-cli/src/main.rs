@@ -484,7 +484,7 @@ fn plugin_video(
     let card_dir = args.get("card_dir").and_then(|v| v.as_str())
         .map(|s| relocate_path(std::path::Path::new(s)))
         .ok_or_else(|| eyre::eyre!("missing 'card_dir'"))?;
-    let bgm = args.get("bgm").and_then(|v| v.as_str()).map(std::path::Path::new);
+    let bgm = args.get("bgm").and_then(|v| v.as_str()).map(|s| relocate_path(std::path::Path::new(s)));
     let aspect = args.get("aspect").and_then(|v| v.as_str()).unwrap_or("9:16");
     let image_size = args.get("image_size").and_then(|v| v.as_str());
     let concurrency = args.get("concurrency").and_then(|v| v.as_u64()).unwrap_or(3) as usize;
@@ -513,7 +513,7 @@ fn plugin_video(
     let batch = args.get("api").and_then(|v| v.as_str()).unwrap_or("rt") == "batch";
     pipeline::video::run(
         &card_dir, &cards, &img_style, &anim_style, cfg,
-        concurrency, Some(aspect), image_size, bgm, still_duration,
+        concurrency, Some(aspect), image_size, bgm.as_deref(), still_duration,
         crossfade_dur, fade_out_dur, music_volume, music_fade_in, batch,
     )?;
 
