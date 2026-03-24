@@ -244,11 +244,21 @@ fn run_plugin(tool_name: &str) -> Result<()> {
 
     // Resolve mofa root relative to the binary location:
     // binary is at <skills_dir>/<skill>/main, so parent.parent = skills_dir
-    // sibling dirs (mofa/, mofa-slides/styles/) are also under skills_dir
+    // sibling dirs (mofa-comic/styles/, mofa-slides/styles/) are also under skills_dir
     let mofa_root = if let Ok(exe) = std::env::current_exe() {
         let skill_dir = exe.parent().unwrap_or(std::path::Path::new("."));
         let skills_dir = skill_dir.parent().unwrap_or(skill_dir);
-        if skills_dir.join("mofa").join("config.json").exists() {
+        // Use skills_dir if any mofa-* sibling dirs exist (plugin mode)
+        if std::fs::read_dir(skills_dir)
+            .map(|entries| {
+                entries.flatten().any(|e| {
+                    e.file_name()
+                        .to_str()
+                        .is_some_and(|n| n.starts_with("mofa-"))
+                })
+            })
+            .unwrap_or(false)
+        {
             skills_dir.to_path_buf()
         } else {
             config::find_mofa_root()
@@ -278,10 +288,11 @@ fn run_plugin(tool_name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Resolve a temp directory under CREW_DATA_DIR/tmp/ if available, else system temp.
+/// Resolve a temp directory under data dir/tmp/ if available, else system temp.
 /// Creates the directory if it doesn't exist.
 fn resolve_temp_dir(prefix: &str) -> PathBuf {
-    let base = std::env::var("CREW_DATA_DIR")
+    let base = std::env::var("OCTOS_DATA_DIR")
+        .or_else(|_| std::env::var("CREW_DATA_DIR"))
         .map(|d| PathBuf::from(d).join("tmp"))
         .unwrap_or_else(|_| std::env::temp_dir());
     let dir = base.join(format!("{prefix}-{}", std::process::id()));
@@ -289,10 +300,10 @@ fn resolve_temp_dir(prefix: &str) -> PathBuf {
     dir
 }
 
-/// Relocate a path under CREW_DATA_DIR/tmp/ if CREW_DATA_DIR is set and the path
+/// Relocate a path under data dir/tmp/ if set and the path
 /// is under the system temp directory. This ensures per-profile isolation.
 fn relocate_path(path: &std::path::Path) -> PathBuf {
-    if let Ok(data_dir) = std::env::var("CREW_DATA_DIR") {
+    if let Ok(data_dir) = std::env::var("OCTOS_DATA_DIR").or_else(|_| std::env::var("CREW_DATA_DIR")) {
         let sys_tmp = std::env::temp_dir();
         if path.starts_with(&sys_tmp) {
             let relative = path.strip_prefix(&sys_tmp).unwrap_or(path);

@@ -65,8 +65,12 @@ struct VoiceEntry {
 }
 
 fn voices_dir() -> PathBuf {
-    let data_dir = std::env::var("CREW_DATA_DIR")
-        .unwrap_or_else(|_| "/tmp/crew".to_string());
+    if let Ok(dir) = std::env::var("OCTOS_VOICE_DIR") {
+        return PathBuf::from(dir);
+    }
+    // Fallback: $OCTOS_DATA_DIR/voices or /tmp/voices
+    let data_dir = std::env::var("OCTOS_DATA_DIR")
+        .unwrap_or_else(|_| "/tmp".to_string());
     PathBuf::from(data_dir).join("voices")
 }
 
@@ -102,6 +106,11 @@ fn resolve_custom_voice(name: &str) -> Option<PathBuf> {
             return Some(path);
         }
     }
+    // Try direct file lookup in voices dir (e.g. <name>.wav without registry entry)
+    let direct = voices_dir().join(format!("{name}.wav"));
+    if direct.exists() {
+        return Some(direct);
+    }
     None
 }
 
@@ -133,8 +142,9 @@ fn ominix_base_url() -> String {
 
 fn http_client() -> reqwest::blocking::Client {
     reqwest::blocking::Client::builder()
-        .connect_timeout(Duration::from_secs(30))
-        // No request timeout — clone with sentence chunking can take 5+ min for long text.
+        .connect_timeout(Duration::from_secs(120))
+        // No request timeout — clone with sentence chunking can take 5+ min for long text
+        // (single-threaded MLX pool processes one chunk at a time).
         .tcp_keepalive(Duration::from_secs(15))
         .build()
         .expect("failed to build HTTP client")
@@ -525,6 +535,27 @@ fn handle_voice_list(_input_json: &str) {
             let path = voices_dir().join(&entry.file);
             let exists = if path.exists() { "" } else { " [file missing]" };
             output.push_str(&format!("  - {name}{exists}\n"));
+        }
+    }
+
+    // Show wav files in voices dir that aren't in the registry
+    let vdir = voices_dir();
+    if vdir.is_dir() {
+        let on_disk: Vec<String> = std::fs::read_dir(&vdir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                name.strip_suffix(".wav").map(|n| n.to_string())
+            })
+            .filter(|n| !reg.voices.contains_key(n))
+            .collect();
+        if !on_disk.is_empty() {
+            output.push_str(&format!("\n**Saved voices ({}):**\n", on_disk.len()));
+            for name in &on_disk {
+                output.push_str(&format!("  - {name}\n"));
+            }
         }
     }
 
