@@ -17,6 +17,8 @@ use serde_json::json;
 const PRESET_VOICES: &[&str] = &[
     "vivian", "serena", "ryan", "aiden", "eric", "dylan", "uncle_fu", "ono_anna", "sohee",
 ];
+const WAV_HEADER_BYTES: usize = 44;
+const MIN_TTS_AUDIO_PAYLOAD_BYTES: usize = 1024;
 
 // ── Input types ──────────────────────────────────────────────────────
 
@@ -219,7 +221,7 @@ fn http_client() -> reqwest::blocking::Client {
 fn pcm_to_wav(pcm: &[u8], sample_rate: u32) -> Vec<u8> {
     let data_len = pcm.len() as u32;
     let file_len = 36 + data_len;
-    let mut wav = Vec::with_capacity(44 + pcm.len());
+    let mut wav = Vec::with_capacity(WAV_HEADER_BYTES + pcm.len());
     wav.extend_from_slice(b"RIFF");
     wav.extend_from_slice(&file_len.to_le_bytes());
     wav.extend_from_slice(b"WAVE");
@@ -235,6 +237,55 @@ fn pcm_to_wav(pcm: &[u8], sample_rate: u32) -> Vec<u8> {
     wav.extend_from_slice(&data_len.to_le_bytes());
     wav.extend_from_slice(pcm);
     wav
+}
+
+fn wav_data_payload_len(wav: &[u8]) -> Option<usize> {
+    if wav.len() < 12 || &wav[..4] != b"RIFF" || &wav[8..12] != b"WAVE" {
+        return None;
+    }
+
+    let mut offset = 12;
+    while offset + 8 <= wav.len() {
+        let chunk_id = &wav[offset..offset + 4];
+        let declared_len = u32::from_le_bytes([
+            wav[offset + 4],
+            wav[offset + 5],
+            wav[offset + 6],
+            wav[offset + 7],
+        ]) as usize;
+        let data_start = offset + 8;
+        if chunk_id == b"data" {
+            return Some(declared_len.min(wav.len().saturating_sub(data_start)));
+        }
+        offset = data_start + declared_len + (declared_len % 2);
+    }
+    None
+}
+
+fn validate_pcm_payload(pcm: &[u8]) -> Result<(), String> {
+    if pcm.is_empty() {
+        return Err("TTS returned empty response".to_string());
+    }
+    if pcm.len() < MIN_TTS_AUDIO_PAYLOAD_BYTES {
+        return Err(format!(
+            "TTS returned too little PCM audio ({} bytes, minimum payload is {})",
+            pcm.len(),
+            MIN_TTS_AUDIO_PAYLOAD_BYTES
+        ));
+    }
+    Ok(())
+}
+
+fn validate_wav_payload(wav: &[u8]) -> Result<(), String> {
+    let Some(payload_len) = wav_data_payload_len(wav) else {
+        return Err("TTS returned invalid WAV audio".to_string());
+    };
+    if payload_len < MIN_TTS_AUDIO_PAYLOAD_BYTES {
+        return Err(format!(
+            "TTS returned too little WAV audio payload ({payload_len} bytes, minimum payload is {MIN_TTS_AUDIO_PAYLOAD_BYTES})"
+        ));
+    }
+    Ok(())
 }
 
 /// Try to convert WAV to MP3 using ffmpeg for smaller file size.
@@ -259,8 +310,16 @@ fn try_convert_to_mp3(wav_path: &str, mp3_path: &str) -> String {
         .status();
     match result {
         Ok(status) if status.success() => {
-            let _ = std::fs::remove_file(wav_path);
-            mp3_path.to_string()
+            if std::fs::metadata(mp3_path)
+                .map(|meta| meta.len() > MIN_TTS_AUDIO_PAYLOAD_BYTES as u64)
+                .unwrap_or(false)
+            {
+                let _ = std::fs::remove_file(wav_path);
+                mp3_path.to_string()
+            } else {
+                let _ = std::fs::remove_file(mp3_path);
+                wav_path.to_string()
+            }
         }
         _ => wav_path.to_string(),
     }
@@ -359,16 +418,14 @@ fn fetch_tts_wav(
         .bytes()
         .map_err(|e| format!("Failed to read TTS response: {e}"))?;
 
-    if bytes.is_empty() {
-        return Err("TTS returned empty response".to_string());
-    }
-
     // If already WAV, pass through
     if content_type.contains("wav") || (bytes.len() >= 4 && &bytes[..4] == b"RIFF") {
+        validate_wav_payload(&bytes)?;
         return Ok(bytes.to_vec());
     }
 
     // Raw PCM → wrap in WAV header (24kHz, 16-bit, mono)
+    validate_pcm_payload(&bytes)?;
     Ok(pcm_to_wav(&bytes, 24000))
 }
 
@@ -498,6 +555,134 @@ fn is_valid_name(name: &str) -> bool {
             .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
 }
 
+// ── Voice verification against ominix-api /v1/voices ─────────────────
+
+/// Voice registration status relative to ominix-api `/v1/voices`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VoiceStatus {
+    /// Present in both the local mofa-fm catalog and ominix-api.
+    Registered,
+    /// In the local catalog but missing from ominix-api (so TTS would silently
+    /// substitute a different voice — surfaces the mini2 yangmi symptom).
+    OrphanedInCatalog,
+    /// Present in ominix-api but not in the local catalog — still usable.
+    OminixOnly,
+}
+
+impl VoiceStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            VoiceStatus::Registered => "registered",
+            VoiceStatus::OrphanedInCatalog => "orphaned_in_catalog",
+            VoiceStatus::OminixOnly => "ominix_only",
+        }
+    }
+}
+
+/// Parse `GET /v1/voices` response body into a flat list of voice names.
+/// Accepts names and their aliases so callers can match against either.
+fn parse_registered_voices(body: &str) -> Result<Vec<String>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| format!("invalid /v1/voices JSON: {e}"))?;
+    let entries = value
+        .get("voices")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "missing 'voices' array".to_string())?;
+    let mut names = Vec::with_capacity(entries.len());
+    for entry in entries {
+        if let Some(name) = entry.get("name").and_then(|n| n.as_str()) {
+            names.push(name.to_string());
+        }
+        if let Some(aliases) = entry.get("aliases").and_then(|a| a.as_array()) {
+            for alias in aliases {
+                if let Some(a) = alias.as_str() {
+                    names.push(a.to_string());
+                }
+            }
+        }
+    }
+    Ok(names)
+}
+
+/// Call `GET /v1/voices` on ominix-api. Returns the flat list of
+/// registered voice names (and aliases). Errors are returned so callers can
+/// choose between failing and degrading gracefully.
+fn fetch_registered_voices(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+) -> Result<Vec<String>, String> {
+    let resp = client
+        .get(format!("{base_url}/v1/voices"))
+        .timeout(Duration::from_secs(10))
+        .send()
+        .map_err(|e| format!("voices request failed: {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("/v1/voices HTTP {status}"));
+    }
+    let body = resp
+        .text()
+        .map_err(|e| format!("failed to read /v1/voices response: {e}"))?;
+    parse_registered_voices(&body)
+}
+
+/// Case-insensitive membership check so `"Yangmi"` matches `"yangmi"`.
+fn voice_in_registry(voice: &str, registered: &[String]) -> bool {
+    let voice = voice.to_lowercase();
+    registered.iter().any(|r| r.to_lowercase() == voice)
+}
+
+/// Pre-validate the `voice` passed to `fm_tts` against ominix-api's registered
+/// list. Empty voice means "server default" — always allowed. Unknown voices
+/// yield an error message the caller can forward to the user.
+fn validate_requested_voice(voice: &str, registered: &[String]) -> Result<(), String> {
+    if voice.is_empty() {
+        return Ok(());
+    }
+    if voice_in_registry(voice, registered) {
+        return Ok(());
+    }
+    let available = if registered.is_empty() {
+        "(none)".to_string()
+    } else {
+        registered.join(", ")
+    };
+    Err(format!(
+        "voice '{voice}' is not registered on ominix-api (available: {available}). \
+         Use fm_voice_save to register this voice first, or choose one of the available voices."
+    ))
+}
+
+/// Classify every catalog + ominix-api voice into a status map.
+///
+/// Keys are lowercased for case-insensitive matching; the value is the display
+/// name (prefers the catalog casing if both have it, otherwise the ominix form).
+fn classify_voice_entries(catalog: &[String], registered: &[String]) -> Vec<(String, VoiceStatus)> {
+    use std::collections::BTreeMap;
+    let mut out: BTreeMap<String, VoiceStatus> = BTreeMap::new();
+    let registered_lc: std::collections::HashSet<String> =
+        registered.iter().map(|s| s.to_lowercase()).collect();
+    let catalog_lc: std::collections::HashSet<String> =
+        catalog.iter().map(|s| s.to_lowercase()).collect();
+
+    for name in catalog {
+        let key = name.to_lowercase();
+        let status = if registered_lc.contains(&key) {
+            VoiceStatus::Registered
+        } else {
+            VoiceStatus::OrphanedInCatalog
+        };
+        out.insert(name.clone(), status);
+    }
+    for name in registered {
+        let key = name.to_lowercase();
+        if !catalog_lc.contains(&key) {
+            out.entry(name.clone()).or_insert(VoiceStatus::OminixOnly);
+        }
+    }
+    out.into_iter().collect()
+}
+
 // ── fm_tts ───────────────────────────────────────────────────────────
 
 fn handle_tts(input_json: &str) {
@@ -519,6 +704,9 @@ fn handle_tts(input_json: &str) {
     let voice_tag = input.voice.as_deref().unwrap_or("default");
     let (wav_output_path, requested_output_path) =
         resolve_tts_output_paths(input.output_path.clone(), voice_tag, &input.text);
+    if wav_output_path != requested_output_path {
+        let _ = std::fs::remove_file(&requested_output_path);
+    }
 
     if let Some(parent) = Path::new(&wav_output_path).parent() {
         if !parent.exists() {
@@ -553,6 +741,23 @@ fn handle_tts(input_json: &str) {
         ));
     }
 
+    // Pre-validate against ominix-api's registered voice list. This catches
+    // cases where mofa-fm's catalog diverged from the server (e.g. mini2
+    // had yangmi locally but ominix-api's voices.json was empty, causing
+    // silent voice substitution). Graceful degradation: if /v1/voices is
+    // unreachable, fall through — better to try than block on a transient
+    // connectivity issue.
+    match fetch_registered_voices(&client, &base_url) {
+        Ok(registered) => {
+            if let Err(msg) = validate_requested_voice(&voice_name, &registered) {
+                fail(&msg);
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: could not verify voice against /v1/voices ({e}); proceeding.");
+        }
+    }
+
     let wav_bytes = if let Some(ref_path) = resolve_custom_voice(&voice_name) {
         // Custom voice → /v1/audio/tts/clone (multipart with raw WAV)
         let ref_bytes = match std::fs::read(&ref_path) {
@@ -563,6 +768,7 @@ fn handle_tts(input_json: &str) {
         let mut form = Form::new()
             .text("input", input.text.clone())
             .text("language", language.clone())
+            .text("response_format", "pcm")
             .part(
                 "reference_audio",
                 Part::bytes(ref_bytes)
@@ -576,7 +782,7 @@ fn handle_tts(input_json: &str) {
         if let Some(ref prompt) = input.prompt {
             form = form.text("prompt", prompt.clone());
         }
-        let endpoint = format!("{base_url}/v1/audio/tts/clone");
+        let endpoint = format!("{base_url}/v1/audio/tts/clone?format=wav");
         let resp = match client
             .post(&endpoint)
             .timeout(Duration::from_secs(1800))
@@ -600,8 +806,14 @@ fn handle_tts(input_json: &str) {
         };
         // Wrap raw PCM in WAV header if needed (streaming mode returns PCM, not WAV)
         if bytes.len() >= 4 && &bytes[..4] == b"RIFF" {
+            if let Err(e) = validate_wav_payload(&bytes) {
+                fail(&e);
+            }
             bytes
         } else {
+            if let Err(e) = validate_pcm_payload(&bytes) {
+                fail(&e);
+            }
             pcm_to_wav(&bytes, 24000)
         }
     } else {
@@ -609,7 +821,8 @@ fn handle_tts(input_json: &str) {
         let mut body = json!({
             "input": input.text,
             "voice": voice_name,
-            "language": language
+            "language": language,
+            "response_format": "pcm"
         });
         if let Some(ref prompt) = input.prompt {
             body["prompt"] = json!(prompt);
@@ -617,18 +830,22 @@ fn handle_tts(input_json: &str) {
         if let Some(speed) = input.speed {
             body["speed"] = json!(speed);
         }
-        let endpoint = format!("{base_url}/v1/audio/tts/qwen3");
+        let endpoint = format!("{base_url}/v1/audio/tts/qwen3?format=wav");
         match fetch_tts_wav(&client, &endpoint, &body) {
             Ok(b) => b,
             Err(e) => fail(&e),
         }
     };
 
+    if let Err(e) = validate_wav_payload(&wav_bytes) {
+        fail(&e);
+    }
+
     if let Err(e) = std::fs::write(&wav_output_path, &wav_bytes) {
         fail(&format!("Failed to write {wav_output_path}: {e}"));
     }
 
-    let duration_secs = wav_bytes.len().saturating_sub(44) as f64 / 48000.0;
+    let duration_secs = wav_data_payload_len(&wav_bytes).unwrap_or(0) as f64 / 48000.0;
     let final_path = if requested_output_path.ends_with(".wav") {
         wav_output_path.clone()
     } else {
@@ -719,12 +936,63 @@ fn handle_voice_save(input_json: &str) {
 
 // ── fm_voice_list ────────────────────────────────────────────────────
 
+/// Collect the mofa-fm local catalog (presets + registered custom + voices
+/// on disk). Used to intersect with ominix-api's /v1/voices response.
+fn collect_local_catalog(reg: &VoiceRegistry, voices_dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = PRESET_VOICES.iter().map(|s| s.to_string()).collect();
+    names.extend(reg.voices.keys().cloned());
+    if voices_dir.is_dir() {
+        if let Ok(iter) = std::fs::read_dir(voices_dir) {
+            for entry in iter.flatten() {
+                if let Some(name) = entry
+                    .file_name()
+                    .to_string_lossy()
+                    .strip_suffix(".wav")
+                    .map(|s| s.to_string())
+                {
+                    if !reg.voices.contains_key(&name) && !names.iter().any(|n| n == &name) {
+                        names.push(name);
+                    }
+                }
+            }
+        }
+    }
+    names
+}
+
 fn handle_voice_list(_input_json: &str) {
     let reg = load_registry();
+    let vdir = voices_dir();
+    let local_catalog = collect_local_catalog(&reg, &vdir);
 
-    let mut output = String::from("**Preset voices:**\n");
+    // Attempt to intersect with ominix-api. Degrade gracefully on failure —
+    // the catalog is still useful without verification.
+    let client = http_client();
+    let base_url = ominix_base_url();
+    let (classification, warning) = match fetch_registered_voices(&client, &base_url) {
+        Ok(registered) => (
+            Some(classify_voice_entries(&local_catalog, &registered)),
+            None,
+        ),
+        Err(e) => (
+            None,
+            Some(format!(
+                "warning: could not reach ominix-api; entries not verified ({e})"
+            )),
+        ),
+    };
+
+    let mut output = String::new();
+    if let Some(ref note) = warning {
+        output.push_str(note);
+        output.push('\n');
+        output.push('\n');
+    }
+
+    output.push_str("**Preset voices:**\n");
     for v in PRESET_VOICES {
-        output.push_str(&format!("  - {v}\n"));
+        let status = status_for(v, classification.as_deref());
+        output.push_str(&format!("  - {v}{status}\n"));
     }
 
     if reg.voices.is_empty() {
@@ -732,14 +1000,14 @@ fn handle_voice_list(_input_json: &str) {
     } else {
         output.push_str(&format!("\n**Custom voices ({}):**\n", reg.voices.len()));
         for (name, entry) in &reg.voices {
-            let path = voices_dir().join(&entry.file);
-            let exists = if path.exists() { "" } else { " [file missing]" };
-            output.push_str(&format!("  - {name}{exists}\n"));
+            let path = vdir.join(&entry.file);
+            let missing = if path.exists() { "" } else { " [file missing]" };
+            let status = status_for(name, classification.as_deref());
+            output.push_str(&format!("  - {name}{missing}{status}\n"));
         }
     }
 
     // Show wav files in voices dir that aren't in the registry
-    let vdir = voices_dir();
     if vdir.is_dir() {
         let on_disk: Vec<String> = std::fs::read_dir(&vdir)
             .into_iter()
@@ -754,7 +1022,26 @@ fn handle_voice_list(_input_json: &str) {
         if !on_disk.is_empty() {
             output.push_str(&format!("\n**Saved voices ({}):**\n", on_disk.len()));
             for name in &on_disk {
-                output.push_str(&format!("  - {name}\n"));
+                let status = status_for(name, classification.as_deref());
+                output.push_str(&format!("  - {name}{status}\n"));
+            }
+        }
+    }
+
+    // Include ominix-only entries (presets the server knows about that aren't
+    // in the local catalog — still usable via fm_tts).
+    if let Some(classes) = classification.as_deref() {
+        let ominix_only: Vec<&String> = classes
+            .iter()
+            .filter_map(|(n, s)| (*s == VoiceStatus::OminixOnly).then_some(n))
+            .collect();
+        if !ominix_only.is_empty() {
+            output.push_str(&format!(
+                "\n**Ominix-only ({}):** (registered on server, not in local catalog)\n",
+                ominix_only.len()
+            ));
+            for name in &ominix_only {
+                output.push_str(&format!("  - {name} [status=ominix_only]\n"));
             }
         }
     }
@@ -763,12 +1050,47 @@ fn handle_voice_list(_input_json: &str) {
         output.push_str(&format!("\n**Default voice:** {default}"));
     }
 
+    if let Some(classes) = classification.as_deref() {
+        let registered_count = classes
+            .iter()
+            .filter(|(_, s)| *s == VoiceStatus::Registered)
+            .count();
+        let orphaned_count = classes
+            .iter()
+            .filter(|(_, s)| *s == VoiceStatus::OrphanedInCatalog)
+            .count();
+        output.push_str(&format!(
+            "\n\n{registered_count} registered, {orphaned_count} orphaned (not synth-capable on this ominix-api)"
+        ));
+    }
+
     succeed(&output);
+}
+
+/// Render a status suffix (e.g. ` [status=registered]`) for a given voice
+/// name. Matches case-insensitively. Returns "" if we don't have verification.
+fn status_for(name: &str, classes: Option<&[(String, VoiceStatus)]>) -> String {
+    let Some(classes) = classes else {
+        return String::new();
+    };
+    let key = name.to_lowercase();
+    for (n, status) in classes {
+        if n.to_lowercase() == key {
+            return format!(" [status={}]", status.as_str());
+        }
+    }
+    String::new()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_tts_output_paths, try_convert_to_mp3};
+    use super::{
+        classify_voice_entries, fetch_registered_voices, http_client, parse_registered_voices,
+        pcm_to_wav, resolve_tts_output_paths, try_convert_to_mp3, validate_pcm_payload,
+        validate_requested_voice, validate_wav_payload, voice_in_registry, VoiceStatus,
+        MIN_TTS_AUDIO_PAYLOAD_BYTES,
+    };
+    use std::net::TcpListener;
 
     #[test]
     fn requested_mp3_uses_distinct_temp_wav() {
@@ -792,6 +1114,181 @@ mod tests {
             try_convert_to_mp3("/tmp/sample.mp3", "/tmp/sample.mp3"),
             "/tmp/sample.mp3"
         );
+    }
+
+    #[test]
+    fn rejects_empty_pcm_before_wav_wrapping() {
+        let err = validate_pcm_payload(&[]).unwrap_err();
+        assert!(err.contains("empty response"));
+    }
+
+    #[test]
+    fn rejects_tiny_pcm_before_wav_wrapping() {
+        let pcm = vec![0u8; MIN_TTS_AUDIO_PAYLOAD_BYTES - 1];
+        let err = validate_pcm_payload(&pcm).unwrap_err();
+        assert!(err.contains("too little PCM audio"));
+    }
+
+    #[test]
+    fn rejects_wav_header_without_audio_data() {
+        let wav = pcm_to_wav(&[], 24000);
+        let err = validate_wav_payload(&wav).unwrap_err();
+        assert!(err.contains("too little WAV audio payload"));
+    }
+
+    #[test]
+    fn accepts_wav_with_real_audio_payload() {
+        let pcm = vec![1u8; MIN_TTS_AUDIO_PAYLOAD_BYTES];
+        let wav = pcm_to_wav(&pcm, 24000);
+        validate_wav_payload(&wav).expect("valid wav should pass");
+    }
+
+    // ── /v1/voices response parsing ──────────────────────────────────
+
+    #[test]
+    fn should_parse_voices_response_and_include_aliases() {
+        let body = r#"{"voices":[
+            {"name":"vivian","aliases":[]},
+            {"name":"serena","aliases":["sera"]}
+        ]}"#;
+        let names = parse_registered_voices(body).expect("parse");
+        assert!(names.iter().any(|n| n == "vivian"));
+        assert!(names.iter().any(|n| n == "serena"));
+        assert!(names.iter().any(|n| n == "sera"));
+    }
+
+    #[test]
+    fn should_handle_empty_voices_response() {
+        let body = r#"{"voices":[]}"#;
+        let names = parse_registered_voices(body).expect("parse");
+        assert!(names.is_empty());
+    }
+
+    #[test]
+    fn should_error_on_missing_voices_key() {
+        let err = parse_registered_voices("{}").unwrap_err();
+        assert!(err.contains("voices"));
+    }
+
+    #[test]
+    fn should_error_on_invalid_json() {
+        let err = parse_registered_voices("not json").unwrap_err();
+        assert!(err.contains("invalid"));
+    }
+
+    // ── validate_requested_voice (fm_tts pre-check) ──────────────────
+
+    #[test]
+    fn should_pre_validate_voice_and_reject_unknown() {
+        let registered = vec!["vivian".to_string(), "serena".to_string()];
+        let err = validate_requested_voice("yangmi", &registered).unwrap_err();
+        assert!(err.contains("yangmi"));
+        assert!(err.contains("not registered"));
+        assert!(err.contains("vivian"));
+        assert!(err.contains("fm_voice_save"));
+    }
+
+    #[test]
+    fn should_pass_through_when_voice_registered() {
+        let registered = vec!["vivian".to_string(), "yangmi".to_string()];
+        assert!(validate_requested_voice("yangmi", &registered).is_ok());
+    }
+
+    #[test]
+    fn should_pass_through_when_voice_registered_case_insensitive() {
+        let registered = vec!["Vivian".to_string()];
+        assert!(validate_requested_voice("vivian", &registered).is_ok());
+        assert!(validate_requested_voice("VIVIAN", &registered).is_ok());
+    }
+
+    #[test]
+    fn should_allow_empty_voice_as_server_default() {
+        assert!(validate_requested_voice("", &[]).is_ok());
+    }
+
+    #[test]
+    fn should_list_available_when_registry_is_empty() {
+        let err = validate_requested_voice("anyone", &[]).unwrap_err();
+        assert!(err.contains("(none)"));
+    }
+
+    // ── graceful degradation (HTTP unreachable) ──────────────────────
+
+    #[test]
+    fn should_fall_through_when_voices_endpoint_unreachable() {
+        // Bind a listener, grab its port, and drop it so the port is closed.
+        // Then the fetch must return Err — caller will fall through.
+        let port = {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+            let port = listener.local_addr().expect("addr").port();
+            drop(listener);
+            port
+        };
+        let client = http_client();
+        let url = format!("http://127.0.0.1:{port}");
+        let result = fetch_registered_voices(&client, &url);
+        assert!(result.is_err(), "expected error, got {:?}", result);
+    }
+
+    // ── classify_voice_entries (fm_voice_list intersection) ──────────
+
+    #[test]
+    fn should_intersect_catalog_with_registered_in_fm_voice_list() {
+        let catalog = vec![
+            "vivian".to_string(),
+            "serena".to_string(),
+            "yangmi".to_string(), // local-only — orphaned
+        ];
+        let registered = vec![
+            "vivian".to_string(),
+            "serena".to_string(),
+            "ryan".to_string(), // server-only — ominix_only
+        ];
+
+        let classes = classify_voice_entries(&catalog, &registered);
+        let find = |n: &str| {
+            classes
+                .iter()
+                .find(|(name, _)| name == n)
+                .map(|(_, s)| *s)
+                .unwrap_or_else(|| panic!("missing {n}"))
+        };
+        assert_eq!(find("vivian"), VoiceStatus::Registered);
+        assert_eq!(find("serena"), VoiceStatus::Registered);
+        assert_eq!(find("yangmi"), VoiceStatus::OrphanedInCatalog);
+        assert_eq!(find("ryan"), VoiceStatus::OminixOnly);
+    }
+
+    #[test]
+    fn should_classify_empty_registered_as_all_orphaned() {
+        let catalog = vec!["vivian".to_string(), "yangmi".to_string()];
+        let registered: Vec<String> = vec![];
+        let classes = classify_voice_entries(&catalog, &registered);
+        assert!(
+            classes
+                .iter()
+                .all(|(_, s)| *s == VoiceStatus::OrphanedInCatalog),
+            "expected all orphaned, got {:?}",
+            classes
+        );
+    }
+
+    #[test]
+    fn should_match_voices_case_insensitively_in_classifier() {
+        let catalog = vec!["Vivian".to_string()];
+        let registered = vec!["vivian".to_string()];
+        let classes = classify_voice_entries(&catalog, &registered);
+        // Vivian (from catalog) should be Registered, not duplicated
+        assert_eq!(classes.len(), 1);
+        assert_eq!(classes[0].1, VoiceStatus::Registered);
+    }
+
+    #[test]
+    fn voice_in_registry_is_case_insensitive() {
+        let registered = vec!["Vivian".to_string(), "SEReNa".to_string()];
+        assert!(voice_in_registry("vivian", &registered));
+        assert!(voice_in_registry("serena", &registered));
+        assert!(!voice_in_registry("ryan", &registered));
     }
 }
 
