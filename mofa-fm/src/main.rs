@@ -7,10 +7,8 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -751,20 +749,25 @@ fn handle_tts(input_json: &str) {
         ));
     }
 
-    // Pre-validate against ominix-api's registered voice list. This catches
-    // cases where mofa-fm's catalog diverged from the server (e.g. mini2
-    // had yangmi locally but ominix-api's voices.json was empty, causing
-    // silent voice substitution). Graceful degradation: if /v1/voices is
-    // unreachable, fall through — better to try than block on a transient
-    // connectivity issue.
-    match fetch_registered_voices(&client, &base_url) {
-        Ok(registered) => {
-            if let Err(msg) = validate_requested_voice(&voice_name, &registered) {
-                fail(&msg);
+    // Pre-validate against ominix-api's registered voice list — but ONLY for
+    // preset voices. Custom voices (those with a local reference WAV in
+    // mofa-fm's catalog) flow through the multipart `/v1/audio/tts/clone`
+    // endpoint, which uploads the reference audio inline and does NOT consult
+    // ominix-api's `/v1/voices` registry. Pre-flighting them against
+    // `/v1/voices` was wrong: it rejected custom voices that work fine via
+    // tts/clone, blocking the documented clone-then-synthesize workflow on
+    // hosts where voices.json is empty (e.g. mini2 yangmi). Graceful
+    // degradation on transient errors is preserved.
+    if resolve_custom_voice(&voice_name).is_none() {
+        match fetch_registered_voices(&client, &base_url) {
+            Ok(registered) => {
+                if let Err(msg) = validate_requested_voice(&voice_name, &registered) {
+                    fail(&msg);
+                }
             }
-        }
-        Err(e) => {
-            eprintln!("Warning: could not verify voice against /v1/voices ({e}); proceeding.");
+            Err(e) => {
+                eprintln!("Warning: could not verify voice against /v1/voices ({e}); proceeding.");
+            }
         }
     }
 
@@ -878,163 +881,6 @@ fn handle_tts(input_json: &str) {
     std::process::exit(0);
 }
 
-// ── Voice training (ominix-api /v1/voices/train) ─────────────────────
-
-/// Maximum time to wait for ominix-api to finish a VITS fine-tune.
-/// Training can legitimately take several minutes; 10 minutes leaves
-/// generous slack for slower hardware before we surface a timeout error.
-const TRAINING_TIMEOUT: Duration = Duration::from_secs(600);
-/// Poll interval for `/v1/voices/train/status`. The endpoint is cheap
-/// (in-memory state); 5s is a comfortable cadence that keeps logs readable
-/// while still surfacing failures promptly.
-const TRAINING_POLL_INTERVAL: Duration = Duration::from_secs(5);
-
-/// Default transcript when the caller did not supply one. ominix-api requires
-/// `transcript` to be non-empty (returns 400 otherwise). The voice name is at
-/// least guaranteed to be non-empty and language-agnostic, which is good enough
-/// to satisfy validation and let training run.
-fn default_transcript_for(voice_name: &str) -> String {
-    format!("voice sample for {voice_name}")
-}
-
-fn default_training_language() -> String {
-    "zh".to_string()
-}
-
-/// Submit a clone request to ominix-api. On success returns the `task_id`
-/// the server assigned; that id is used to poll status until completion.
-fn submit_voice_training(
-    client: &reqwest::blocking::Client,
-    base_url: &str,
-    voice_name: &str,
-    audio_b64: &str,
-    transcript: &str,
-    language: &str,
-) -> Result<String, String> {
-    let body = json!({
-        "voice_name": voice_name,
-        "audio": audio_b64,
-        "transcript": transcript,
-        "quality": "standard",
-        "language": language,
-        "denoise": false,
-    });
-    let resp = client
-        .post(format!("{base_url}/v1/voices/train"))
-        .timeout(Duration::from_secs(120))
-        .json(&body)
-        .send()
-        .map_err(|e| format!("failed to POST /v1/voices/train: {e}"))?;
-    let status = resp.status();
-    let text = resp
-        .text()
-        .map_err(|e| format!("failed to read /v1/voices/train response: {e}"))?;
-    if !status.is_success() {
-        return Err(format!(
-            "ominix-api /v1/voices/train returned HTTP {status}: {}",
-            truncate(&text, 300)
-        ));
-    }
-    let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
-        format!(
-            "invalid /v1/voices/train JSON: {e} (body: {})",
-            truncate(&text, 200)
-        )
-    })?;
-    value
-        .get("task_id")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| {
-            format!(
-                "/v1/voices/train response missing 'task_id' (body: {})",
-                truncate(&text, 200)
-            )
-        })
-}
-
-/// Outcome of polling `/v1/voices/train/status` to completion.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum TrainingOutcome {
-    Complete,
-    Failed { error: String },
-}
-
-/// Interpret a training status JSON body into a poll outcome.
-/// Returns `Ok(Some(_))` for terminal states, `Ok(None)` while still in progress,
-/// and `Err(_)` if the JSON is unparseable.
-fn parse_training_status(body: &str) -> Result<Option<TrainingOutcome>, String> {
-    let value: serde_json::Value =
-        serde_json::from_str(body).map_err(|e| format!("invalid status JSON: {e}"))?;
-    let stage = value
-        .get("status")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "missing 'status' field".to_string())?;
-    match stage {
-        "complete" => Ok(Some(TrainingOutcome::Complete)),
-        "failed" => {
-            let err = value
-                .get("error")
-                .and_then(|v| v.as_str())
-                .unwrap_or("training failed (no error message)")
-                .to_string();
-            Ok(Some(TrainingOutcome::Failed { error: err }))
-        }
-        _ => Ok(None),
-    }
-}
-
-/// Poll `/v1/voices/train/status` until the task reaches a terminal state
-/// (complete or failed) or `TRAINING_TIMEOUT` elapses.
-fn poll_voice_training(
-    client: &reqwest::blocking::Client,
-    base_url: &str,
-    task_id: &str,
-) -> Result<TrainingOutcome, String> {
-    let started = Instant::now();
-    let url = format!("{base_url}/v1/voices/train/status?task_id={task_id}");
-    loop {
-        let resp = match client.get(&url).timeout(Duration::from_secs(15)).send() {
-            Ok(r) => r,
-            Err(e) => {
-                // Transient network errors should not abort the poll —
-                // training may still be running. Surface and retry.
-                eprintln!("Warning: status poll failed: {e}");
-                if started.elapsed() >= TRAINING_TIMEOUT {
-                    return Err(format!(
-                        "OminiX-API training status unreachable after {} seconds: {e}",
-                        started.elapsed().as_secs()
-                    ));
-                }
-                thread::sleep(TRAINING_POLL_INTERVAL);
-                continue;
-            }
-        };
-        let status = resp.status();
-        let text = resp
-            .text()
-            .map_err(|e| format!("failed to read status body: {e}"))?;
-        if !status.is_success() {
-            return Err(format!(
-                "ominix-api /v1/voices/train/status returned HTTP {status}: {}",
-                truncate(&text, 200)
-            ));
-        }
-        match parse_training_status(&text)? {
-            Some(outcome) => return Ok(outcome),
-            None => {
-                if started.elapsed() >= TRAINING_TIMEOUT {
-                    return Err(format!(
-                        "OminiX-API training timed out after {} minutes (task_id={task_id})",
-                        TRAINING_TIMEOUT.as_secs() / 60
-                    ));
-                }
-                thread::sleep(TRAINING_POLL_INTERVAL);
-            }
-        }
-    }
-}
-
 // ── fm_voice_save ────────────────────────────────────────────────────
 
 fn handle_voice_save(input_json: &str) {
@@ -1085,7 +931,13 @@ fn handle_voice_save(input_json: &str) {
         fail(&e);
     }
 
-    // Update registry
+    // Update registry. The local catalog entry is sufficient: fm_tts uses
+    // ominix-api's `/v1/audio/tts/clone` multipart endpoint for custom voices,
+    // which uploads the reference WAV inline per request and does NOT depend
+    // on the voice being pre-registered with `/v1/voices/train`. The heavier
+    // train+poll path is gated on a model bundle (gpt-sovits-mlx) that is not
+    // installed on every host, so saving locally and synthesising via
+    // tts/clone is the path that works without extra setup.
     let mut reg = load_registry();
     reg.voices.insert(
         name.clone(),
@@ -1096,97 +948,14 @@ fn handle_voice_save(input_json: &str) {
     );
     save_registry(&reg);
 
-    // ── Register the voice with ominix-api so fm_tts can synthesize ──
-    //
-    // Without this step, mofa-fm's local catalog drifts from ominix-api's
-    // /v1/voices and any subsequent fm_tts call fails with
-    // "voice 'X' is not registered on ominix-api". Train the voice
-    // synchronously so the user knows the clone is ready.
-    let base_url = ominix_base_url();
-    if std::env::var("OMINIX_API_URL").is_err()
-        && !Path::new(&std::env::var("HOME").unwrap_or_default())
-            .join(".ominix")
-            .join("api_url")
-            .exists()
-    {
-        // Roll back the local registration — without ominix-api the voice
-        // isn't actually usable and pretending otherwise would deceive the LLM.
-        let mut reg = load_registry();
-        reg.voices.remove(&name);
-        save_registry(&reg);
-        let _ = std::fs::remove_file(&dest);
-        fail(
-            "OMINIX_API_URL not configured; voice cannot be registered with the TTS server. \
-             Set OMINIX_API_URL or create ~/.ominix/api_url before saving voices.",
-        );
-    }
+    // Acknowledge transcript/language inputs even though the lighter clone
+    // path does not need them — preserving the schema means the LLM can keep
+    // populating the documented fields without breakage.
+    let _ = (&input.transcript, &input.language);
 
-    let audio_bytes = match std::fs::read(&dest) {
-        Ok(b) => b,
-        Err(e) => fail(&format!("Failed to read saved voice for upload: {e}")),
-    };
-    let audio_b64 = base64::engine::general_purpose::STANDARD.encode(&audio_bytes);
-    let transcript = input
-        .transcript
-        .filter(|t| !t.trim().is_empty())
-        .unwrap_or_else(|| default_transcript_for(&name));
-    let language = input.language.unwrap_or_else(default_training_language);
-
-    let client = http_client();
-    let task_id = match submit_voice_training(
-        &client,
-        &base_url,
-        &name,
-        &audio_b64,
-        &transcript,
-        &language,
-    ) {
-        Ok(id) => id,
-        Err(e) => {
-            // Roll back local registration so the catalog stays in sync.
-            let mut reg = load_registry();
-            reg.voices.remove(&name);
-            save_registry(&reg);
-            let _ = std::fs::remove_file(&dest);
-            fail(&format!(
-                "Voice cloning failed to start on ominix-api: {e}. Local catalog rolled back."
-            ));
-        }
-    };
-
-    eprintln!(
-        "Started voice training task {task_id} for '{name}' (this can take several minutes)..."
-    );
-
-    match poll_voice_training(&client, &base_url, &task_id) {
-        Ok(TrainingOutcome::Complete) => {
-            succeed(&format!(
-                "Voice '{name}' cloned and registered with ominix-api (task_id={task_id}). \
-                 Use it with fm_tts by setting voice to '{name}'."
-            ));
-        }
-        Ok(TrainingOutcome::Failed { error }) => {
-            // Roll back: ominix-api owns the source of truth for what's
-            // synth-capable, and mofa-fm should not advertise a voice the
-            // server rejected.
-            let mut reg = load_registry();
-            reg.voices.remove(&name);
-            save_registry(&reg);
-            let _ = std::fs::remove_file(&dest);
-            fail(&format!(
-                "OminiX-API training failed for '{name}' (task_id={task_id}): {error}"
-            ));
-        }
-        Err(e) => {
-            let mut reg = load_registry();
-            reg.voices.remove(&name);
-            save_registry(&reg);
-            let _ = std::fs::remove_file(&dest);
-            fail(&format!(
-                "Voice training did not complete cleanly: {e}. Local catalog rolled back."
-            ));
-        }
-    }
+    succeed(&format!(
+        "Voice '{name}' saved. Use it with fm_tts by setting voice to '{name}'."
+    ));
 }
 
 // ── fm_voice_list ────────────────────────────────────────────────────
@@ -1337,13 +1106,76 @@ fn status_for(name: &str, classes: Option<&[(String, VoiceStatus)]>) -> String {
     String::new()
 }
 
+// ── fm_voice_delete ──────────────────────────────────────────────────
+
+fn handle_voice_delete(input_json: &str) {
+    let input: VoiceDeleteInput = match serde_json::from_str(input_json) {
+        Ok(v) => v,
+        Err(e) => fail(&format!("Invalid input: {e}")),
+    };
+
+    let name = input.name.to_lowercase();
+
+    if is_preset(&name) {
+        fail(&format!("Cannot delete preset voice '{name}'"));
+    }
+
+    let mut reg = load_registry();
+
+    if let Some(entry) = reg.voices.remove(&name) {
+        // Delete the audio file
+        let path = voices_dir().join(&entry.file);
+        if path.exists() {
+            std::fs::remove_file(&path).ok();
+        }
+
+        // Clear default if it was this voice
+        if reg.default_voice.as_deref() == Some(&name) {
+            reg.default_voice = None;
+        }
+
+        save_registry(&reg);
+        succeed(&format!("Voice '{name}' deleted."));
+    } else {
+        fail(&format!(
+            "Custom voice '{name}' not found. Use fm_voice_list to see available voices."
+        ));
+    }
+}
+
+// ── Main ─────────────────────────────────────────────────────────────
+
+fn main() {
+    if !cfg!(target_os = "macos") {
+        fail("mofa-fm requires macOS (ominix-api TTS is Apple Silicon only)");
+    }
+
+    let args: Vec<String> = std::env::args().collect();
+    let tool_name = args.get(1).map(|s| s.as_str()).unwrap_or("unknown");
+
+    let mut buf = String::new();
+    if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
+        fail(&format!("Failed to read stdin: {e}"));
+    }
+
+    match tool_name {
+        "fm_tts" => handle_tts(&buf),
+        "fm_voice_save" => handle_voice_save(&buf),
+        "fm_voice_list" => handle_voice_list(&buf),
+        "fm_voice_delete" => handle_voice_delete(&buf),
+        _ => fail(&format!(
+            "Unknown tool '{tool_name}'. Expected: fm_tts, fm_voice_save, fm_voice_list, fm_voice_delete"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_voice_entries, default_transcript_for, fetch_registered_voices, http_client,
-        parse_registered_voices, parse_training_status, pcm_to_wav, resolve_tts_output_paths,
-        try_convert_to_mp3, validate_pcm_payload, validate_requested_voice, validate_wav_payload,
-        voice_in_registry, TrainingOutcome, VoiceStatus, MIN_TTS_AUDIO_PAYLOAD_BYTES,
+        classify_voice_entries, fetch_registered_voices, http_client, parse_registered_voices,
+        pcm_to_wav, resolve_tts_output_paths, try_convert_to_mp3, validate_pcm_payload,
+        validate_requested_voice, validate_wav_payload, voice_in_registry, VoiceStatus,
+        MIN_TTS_AUDIO_PAYLOAD_BYTES,
     };
     use std::net::TcpListener;
 
@@ -1544,130 +1376,5 @@ mod tests {
         assert!(voice_in_registry("vivian", &registered));
         assert!(voice_in_registry("serena", &registered));
         assert!(!voice_in_registry("ryan", &registered));
-    }
-
-    // ── Voice training status parsing (poll loop terminator) ─────────
-
-    #[test]
-    fn should_treat_complete_status_as_terminal_success() {
-        let body = r#"{"task_id":"t1","voice_name":"x","status":"complete","progress":1.0,"created_at":"now"}"#;
-        match parse_training_status(body).expect("parse") {
-            Some(TrainingOutcome::Complete) => {}
-            other => panic!("expected Complete, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn should_treat_failed_status_as_terminal_failure_with_error() {
-        let body = r#"{"task_id":"t1","voice_name":"x","status":"failed","progress":0.5,"created_at":"now","error":"boom"}"#;
-        match parse_training_status(body).expect("parse") {
-            Some(TrainingOutcome::Failed { error }) => assert!(error.contains("boom")),
-            other => panic!("expected Failed, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn should_treat_failed_without_error_as_failure_with_default_message() {
-        let body = r#"{"task_id":"t1","voice_name":"x","status":"failed","progress":0.5,"created_at":"n"}"#;
-        match parse_training_status(body).expect("parse") {
-            Some(TrainingOutcome::Failed { error }) => assert!(!error.is_empty()),
-            other => panic!("expected Failed, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn should_keep_polling_when_status_is_in_progress() {
-        for stage in [
-            "queued",
-            "audio_slicing",
-            "denoising",
-            "feature_extraction",
-            "vits_training",
-            "registering_voice",
-        ] {
-            let body = format!(
-                r#"{{"task_id":"t1","voice_name":"x","status":"{stage}","progress":0.1,"created_at":"now"}}"#
-            );
-            assert!(
-                parse_training_status(&body).expect("parse").is_none(),
-                "stage {stage} should be non-terminal"
-            );
-        }
-    }
-
-    #[test]
-    fn should_error_on_status_response_without_status_field() {
-        let err = parse_training_status(r#"{"task_id":"t1"}"#).unwrap_err();
-        assert!(err.contains("status"));
-    }
-
-    #[test]
-    fn default_transcript_is_derived_from_voice_name() {
-        let t = default_transcript_for("yangmi");
-        assert!(!t.is_empty());
-        assert!(t.contains("yangmi"));
-    }
-}
-
-// ── fm_voice_delete ──────────────────────────────────────────────────
-
-fn handle_voice_delete(input_json: &str) {
-    let input: VoiceDeleteInput = match serde_json::from_str(input_json) {
-        Ok(v) => v,
-        Err(e) => fail(&format!("Invalid input: {e}")),
-    };
-
-    let name = input.name.to_lowercase();
-
-    if is_preset(&name) {
-        fail(&format!("Cannot delete preset voice '{name}'"));
-    }
-
-    let mut reg = load_registry();
-
-    if let Some(entry) = reg.voices.remove(&name) {
-        // Delete the audio file
-        let path = voices_dir().join(&entry.file);
-        if path.exists() {
-            std::fs::remove_file(&path).ok();
-        }
-
-        // Clear default if it was this voice
-        if reg.default_voice.as_deref() == Some(&name) {
-            reg.default_voice = None;
-        }
-
-        save_registry(&reg);
-        succeed(&format!("Voice '{name}' deleted."));
-    } else {
-        fail(&format!(
-            "Custom voice '{name}' not found. Use fm_voice_list to see available voices."
-        ));
-    }
-}
-
-// ── Main ─────────────────────────────────────────────────────────────
-
-fn main() {
-    if !cfg!(target_os = "macos") {
-        fail("mofa-fm requires macOS (ominix-api TTS is Apple Silicon only)");
-    }
-
-    let args: Vec<String> = std::env::args().collect();
-    let tool_name = args.get(1).map(|s| s.as_str()).unwrap_or("unknown");
-
-    let mut buf = String::new();
-    if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
-        fail(&format!("Failed to read stdin: {e}"));
-    }
-
-    match tool_name {
-        "fm_tts" => handle_tts(&buf),
-        "fm_voice_save" => handle_voice_save(&buf),
-        "fm_voice_list" => handle_voice_list(&buf),
-        "fm_voice_delete" => handle_voice_delete(&buf),
-        _ => fail(&format!(
-            "Unknown tool '{tool_name}'. Expected: fm_tts, fm_voice_save, fm_voice_list, fm_voice_delete"
-        )),
     }
 }
