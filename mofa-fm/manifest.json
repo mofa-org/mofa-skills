@@ -56,7 +56,7 @@
       "name": "fm_tts",
       "spawn_only": true,
       "spawn_only_message": "SUCCESS: Audio generation is now running in background. The audio file will be automatically delivered to the user when ready. No further action needed for this request.",
-      "description": "Synthesize speech from text. Call this tool directly with the full text — it runs in background automatically and the audio file is delivered to the user when ready. Do NOT use shell scripts or manual splitting. Supports long text, preset and custom voices.",
+      "description": "Synthesize speech from text using a preset voice or a voice that has already been registered via fm_voice_save. To clone a new voice from a sample clip (克隆), call fm_voice_save FIRST to register the speaker — fm_tts itself does not create or register voices. Call this tool directly with the full text — it runs in background and the audio file is delivered to the user when ready. Do NOT use shell scripts or manual splitting. Supports long text, preset and saved custom voices.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -92,17 +92,25 @@
     },
     {
       "name": "fm_voice_save",
-      "description": "Save an audio file as a named custom voice. ALWAYS call fm_voice_list first to check if the voice already exists — do NOT re-save existing voices. Only save new voices from user-provided audio clips (3-10 seconds of clear speech).",
+      "description": "Clone (克隆) a new voice from a reference audio clip and register it with the TTS server so it can be used by fm_tts. MUST be called BEFORE fm_tts whenever the user asks to clone a voice or use a non-preset voice. Audio should be 3-10 seconds of clear speech from the target speaker (WAV preferred; MP3/M4A/OGG/FLAC are auto-converted). Once saved, pass the same name to fm_tts to synthesize. ALWAYS call fm_voice_list first to check if the voice already exists — do NOT re-save existing voices. This tool runs the full VITS fine-tune on the server and may take several minutes; the call blocks until training completes.",
       "input_schema": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "description": "Name for the voice (alphanumeric and underscores only, e.g. 'my_voice', 'boss')"
+            "description": "Name for the voice (alphanumeric and underscores only, e.g. 'my_voice', 'boss'). Pass this same name to fm_tts after saving."
           },
           "audio_path": {
             "type": "string",
             "description": "Absolute path to the audio file to use as voice reference. Supports WAV directly and auto-converts MP3/M4A/OGG/FLAC to WAV before saving."
+          },
+          "transcript": {
+            "type": "string",
+            "description": "Transcript of what is said in the reference audio. Required by the TTS server for high-quality cloning. Provide the exact text spoken in the clip in the clip's language. If unknown, pass a short placeholder phrase in the target language (training will still complete but quality may degrade)."
+          },
+          "language": {
+            "type": "string",
+            "description": "Language hint for the reference audio: 'zh' (default), 'en', 'ja', 'ko'."
           }
         },
         "required": [
