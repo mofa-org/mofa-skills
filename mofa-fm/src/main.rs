@@ -7,8 +7,10 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::thread;
+use std::time::{Duration, Instant};
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -43,6 +45,14 @@ struct TtsInput {
 struct VoiceSaveInput {
     name: String,
     audio_path: String,
+    /// Transcript of the reference clip (the words spoken). Required by
+    /// ominix-api `/v1/voices/train` for high-quality cloning. Defaults to a
+    /// placeholder phrase when omitted so training still completes.
+    #[serde(default)]
+    transcript: Option<String>,
+    /// Language hint passed through to ominix-api: `zh` (default), `en`, etc.
+    #[serde(default)]
+    language: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -868,6 +878,163 @@ fn handle_tts(input_json: &str) {
     std::process::exit(0);
 }
 
+// ── Voice training (ominix-api /v1/voices/train) ─────────────────────
+
+/// Maximum time to wait for ominix-api to finish a VITS fine-tune.
+/// Training can legitimately take several minutes; 10 minutes leaves
+/// generous slack for slower hardware before we surface a timeout error.
+const TRAINING_TIMEOUT: Duration = Duration::from_secs(600);
+/// Poll interval for `/v1/voices/train/status`. The endpoint is cheap
+/// (in-memory state); 5s is a comfortable cadence that keeps logs readable
+/// while still surfacing failures promptly.
+const TRAINING_POLL_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Default transcript when the caller did not supply one. ominix-api requires
+/// `transcript` to be non-empty (returns 400 otherwise). The voice name is at
+/// least guaranteed to be non-empty and language-agnostic, which is good enough
+/// to satisfy validation and let training run.
+fn default_transcript_for(voice_name: &str) -> String {
+    format!("voice sample for {voice_name}")
+}
+
+fn default_training_language() -> String {
+    "zh".to_string()
+}
+
+/// Submit a clone request to ominix-api. On success returns the `task_id`
+/// the server assigned; that id is used to poll status until completion.
+fn submit_voice_training(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    voice_name: &str,
+    audio_b64: &str,
+    transcript: &str,
+    language: &str,
+) -> Result<String, String> {
+    let body = json!({
+        "voice_name": voice_name,
+        "audio": audio_b64,
+        "transcript": transcript,
+        "quality": "standard",
+        "language": language,
+        "denoise": false,
+    });
+    let resp = client
+        .post(format!("{base_url}/v1/voices/train"))
+        .timeout(Duration::from_secs(120))
+        .json(&body)
+        .send()
+        .map_err(|e| format!("failed to POST /v1/voices/train: {e}"))?;
+    let status = resp.status();
+    let text = resp
+        .text()
+        .map_err(|e| format!("failed to read /v1/voices/train response: {e}"))?;
+    if !status.is_success() {
+        return Err(format!(
+            "ominix-api /v1/voices/train returned HTTP {status}: {}",
+            truncate(&text, 300)
+        ));
+    }
+    let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
+        format!(
+            "invalid /v1/voices/train JSON: {e} (body: {})",
+            truncate(&text, 200)
+        )
+    })?;
+    value
+        .get("task_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            format!(
+                "/v1/voices/train response missing 'task_id' (body: {})",
+                truncate(&text, 200)
+            )
+        })
+}
+
+/// Outcome of polling `/v1/voices/train/status` to completion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TrainingOutcome {
+    Complete,
+    Failed { error: String },
+}
+
+/// Interpret a training status JSON body into a poll outcome.
+/// Returns `Ok(Some(_))` for terminal states, `Ok(None)` while still in progress,
+/// and `Err(_)` if the JSON is unparseable.
+fn parse_training_status(body: &str) -> Result<Option<TrainingOutcome>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| format!("invalid status JSON: {e}"))?;
+    let stage = value
+        .get("status")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "missing 'status' field".to_string())?;
+    match stage {
+        "complete" => Ok(Some(TrainingOutcome::Complete)),
+        "failed" => {
+            let err = value
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("training failed (no error message)")
+                .to_string();
+            Ok(Some(TrainingOutcome::Failed { error: err }))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Poll `/v1/voices/train/status` until the task reaches a terminal state
+/// (complete or failed) or `TRAINING_TIMEOUT` elapses.
+fn poll_voice_training(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    task_id: &str,
+) -> Result<TrainingOutcome, String> {
+    let started = Instant::now();
+    let url = format!("{base_url}/v1/voices/train/status?task_id={task_id}");
+    loop {
+        let resp = match client.get(&url).timeout(Duration::from_secs(15)).send() {
+            Ok(r) => r,
+            Err(e) => {
+                // Transient network errors should not abort the poll —
+                // training may still be running. Surface and retry.
+                eprintln!("Warning: status poll failed: {e}");
+                if started.elapsed() >= TRAINING_TIMEOUT {
+                    return Err(format!(
+                        "OminiX-API training status unreachable after {} seconds: {e}",
+                        started.elapsed().as_secs()
+                    ));
+                }
+                thread::sleep(TRAINING_POLL_INTERVAL);
+                continue;
+            }
+        };
+        let status = resp.status();
+        let text = resp
+            .text()
+            .map_err(|e| format!("failed to read status body: {e}"))?;
+        if !status.is_success() {
+            return Err(format!(
+                "ominix-api /v1/voices/train/status returned HTTP {status}: {}",
+                truncate(&text, 200)
+            ));
+        }
+        match parse_training_status(&text)? {
+            Some(outcome) => return Ok(outcome),
+            None => {
+                if started.elapsed() >= TRAINING_TIMEOUT {
+                    return Err(format!(
+                        "OminiX-API training timed out after {} minutes (task_id={task_id})",
+                        TRAINING_TIMEOUT.as_secs() / 60
+                    ));
+                }
+                thread::sleep(TRAINING_POLL_INTERVAL);
+            }
+        }
+    }
+}
+
 // ── fm_voice_save ────────────────────────────────────────────────────
 
 fn handle_voice_save(input_json: &str) {
@@ -929,9 +1096,97 @@ fn handle_voice_save(input_json: &str) {
     );
     save_registry(&reg);
 
-    succeed(&format!(
-        "Voice '{name}' saved successfully. Use it with fm_tts by setting voice to '{name}'."
-    ));
+    // ── Register the voice with ominix-api so fm_tts can synthesize ──
+    //
+    // Without this step, mofa-fm's local catalog drifts from ominix-api's
+    // /v1/voices and any subsequent fm_tts call fails with
+    // "voice 'X' is not registered on ominix-api". Train the voice
+    // synchronously so the user knows the clone is ready.
+    let base_url = ominix_base_url();
+    if std::env::var("OMINIX_API_URL").is_err()
+        && !Path::new(&std::env::var("HOME").unwrap_or_default())
+            .join(".ominix")
+            .join("api_url")
+            .exists()
+    {
+        // Roll back the local registration — without ominix-api the voice
+        // isn't actually usable and pretending otherwise would deceive the LLM.
+        let mut reg = load_registry();
+        reg.voices.remove(&name);
+        save_registry(&reg);
+        let _ = std::fs::remove_file(&dest);
+        fail(
+            "OMINIX_API_URL not configured; voice cannot be registered with the TTS server. \
+             Set OMINIX_API_URL or create ~/.ominix/api_url before saving voices.",
+        );
+    }
+
+    let audio_bytes = match std::fs::read(&dest) {
+        Ok(b) => b,
+        Err(e) => fail(&format!("Failed to read saved voice for upload: {e}")),
+    };
+    let audio_b64 = base64::engine::general_purpose::STANDARD.encode(&audio_bytes);
+    let transcript = input
+        .transcript
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| default_transcript_for(&name));
+    let language = input.language.unwrap_or_else(default_training_language);
+
+    let client = http_client();
+    let task_id = match submit_voice_training(
+        &client,
+        &base_url,
+        &name,
+        &audio_b64,
+        &transcript,
+        &language,
+    ) {
+        Ok(id) => id,
+        Err(e) => {
+            // Roll back local registration so the catalog stays in sync.
+            let mut reg = load_registry();
+            reg.voices.remove(&name);
+            save_registry(&reg);
+            let _ = std::fs::remove_file(&dest);
+            fail(&format!(
+                "Voice cloning failed to start on ominix-api: {e}. Local catalog rolled back."
+            ));
+        }
+    };
+
+    eprintln!(
+        "Started voice training task {task_id} for '{name}' (this can take several minutes)..."
+    );
+
+    match poll_voice_training(&client, &base_url, &task_id) {
+        Ok(TrainingOutcome::Complete) => {
+            succeed(&format!(
+                "Voice '{name}' cloned and registered with ominix-api (task_id={task_id}). \
+                 Use it with fm_tts by setting voice to '{name}'."
+            ));
+        }
+        Ok(TrainingOutcome::Failed { error }) => {
+            // Roll back: ominix-api owns the source of truth for what's
+            // synth-capable, and mofa-fm should not advertise a voice the
+            // server rejected.
+            let mut reg = load_registry();
+            reg.voices.remove(&name);
+            save_registry(&reg);
+            let _ = std::fs::remove_file(&dest);
+            fail(&format!(
+                "OminiX-API training failed for '{name}' (task_id={task_id}): {error}"
+            ));
+        }
+        Err(e) => {
+            let mut reg = load_registry();
+            reg.voices.remove(&name);
+            save_registry(&reg);
+            let _ = std::fs::remove_file(&dest);
+            fail(&format!(
+                "Voice training did not complete cleanly: {e}. Local catalog rolled back."
+            ));
+        }
+    }
 }
 
 // ── fm_voice_list ────────────────────────────────────────────────────
@@ -1085,10 +1340,10 @@ fn status_for(name: &str, classes: Option<&[(String, VoiceStatus)]>) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_voice_entries, fetch_registered_voices, http_client, parse_registered_voices,
-        pcm_to_wav, resolve_tts_output_paths, try_convert_to_mp3, validate_pcm_payload,
-        validate_requested_voice, validate_wav_payload, voice_in_registry, VoiceStatus,
-        MIN_TTS_AUDIO_PAYLOAD_BYTES,
+        classify_voice_entries, default_transcript_for, fetch_registered_voices, http_client,
+        parse_registered_voices, parse_training_status, pcm_to_wav, resolve_tts_output_paths,
+        try_convert_to_mp3, validate_pcm_payload, validate_requested_voice, validate_wav_payload,
+        voice_in_registry, TrainingOutcome, VoiceStatus, MIN_TTS_AUDIO_PAYLOAD_BYTES,
     };
     use std::net::TcpListener;
 
@@ -1289,6 +1544,68 @@ mod tests {
         assert!(voice_in_registry("vivian", &registered));
         assert!(voice_in_registry("serena", &registered));
         assert!(!voice_in_registry("ryan", &registered));
+    }
+
+    // ── Voice training status parsing (poll loop terminator) ─────────
+
+    #[test]
+    fn should_treat_complete_status_as_terminal_success() {
+        let body = r#"{"task_id":"t1","voice_name":"x","status":"complete","progress":1.0,"created_at":"now"}"#;
+        match parse_training_status(body).expect("parse") {
+            Some(TrainingOutcome::Complete) => {}
+            other => panic!("expected Complete, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn should_treat_failed_status_as_terminal_failure_with_error() {
+        let body = r#"{"task_id":"t1","voice_name":"x","status":"failed","progress":0.5,"created_at":"now","error":"boom"}"#;
+        match parse_training_status(body).expect("parse") {
+            Some(TrainingOutcome::Failed { error }) => assert!(error.contains("boom")),
+            other => panic!("expected Failed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn should_treat_failed_without_error_as_failure_with_default_message() {
+        let body = r#"{"task_id":"t1","voice_name":"x","status":"failed","progress":0.5,"created_at":"n"}"#;
+        match parse_training_status(body).expect("parse") {
+            Some(TrainingOutcome::Failed { error }) => assert!(!error.is_empty()),
+            other => panic!("expected Failed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn should_keep_polling_when_status_is_in_progress() {
+        for stage in [
+            "queued",
+            "audio_slicing",
+            "denoising",
+            "feature_extraction",
+            "vits_training",
+            "registering_voice",
+        ] {
+            let body = format!(
+                r#"{{"task_id":"t1","voice_name":"x","status":"{stage}","progress":0.1,"created_at":"now"}}"#
+            );
+            assert!(
+                parse_training_status(&body).expect("parse").is_none(),
+                "stage {stage} should be non-terminal"
+            );
+        }
+    }
+
+    #[test]
+    fn should_error_on_status_response_without_status_field() {
+        let err = parse_training_status(r#"{"task_id":"t1"}"#).unwrap_err();
+        assert!(err.contains("status"));
+    }
+
+    #[test]
+    fn default_transcript_is_derived_from_voice_name() {
+        let t = default_transcript_for("yangmi");
+        assert!(!t.is_empty());
+        assert!(t.contains("yangmi"));
     }
 }
 
