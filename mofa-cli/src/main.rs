@@ -8,6 +8,7 @@ mod image_util;
 mod layout;
 mod pipeline;
 mod pptx;
+mod protocol_v2;
 mod style;
 mod veo;
 
@@ -276,12 +277,18 @@ fn find_styles_dir(mofa_root: &std::path::Path, skill_name: &str) -> PathBuf {
 }
 
 /// Plugin protocol mode: called as `./main <tool_name>` with JSON on stdin.
-/// Returns `{"output": "...", "success": true/false}` on stdout.
-fn run_plugin(tool_name: &str) -> Result<()> {
+/// Returns `{"output": "...", "success": true/false, "summary": ...}` on stdout.
+fn run_plugin(tool_name: &str, cancel: &std::sync::atomic::AtomicBool) -> Result<()> {
+    use crate::protocol_v2::{check_cancel, emit_v2_progress};
+
+    emit_v2_progress("init", &format!("Parsing {tool_name} request"), Some(0.0));
+
     let mut input_json = String::new();
     std::io::stdin().read_to_string(&mut input_json)?;
     let args: serde_json::Value =
         serde_json::from_str(&input_json).unwrap_or_else(|_| serde_json::json!({}));
+
+    check_cancel(cancel);
 
     // Resolve mofa root relative to the binary location:
     // binary is at <skills_dir>/<skill>/main, so parent.parent = skills_dir
@@ -309,18 +316,33 @@ fn run_plugin(tool_name: &str) -> Result<()> {
     };
     let cfg = config::MofaConfig::load_default(&mofa_root);
 
-    let result = match tool_name {
-        "mofa_slides" => plugin_slides(&args, &mofa_root, &cfg),
-        "mofa_cards" => plugin_cards(&args, &mofa_root, &cfg),
-        "mofa_comic" => plugin_comic(&args, &mofa_root, &cfg),
-        "mofa_infographic" => plugin_infographic(&args, &mofa_root, &cfg),
-        "mofa_video" => plugin_video(&args, &mofa_root, &cfg),
+    // Each plugin handler returns a (human_output, summary) tuple so we
+    // can attach the v2 `summary` field uniformly. Tools that don't yet
+    // emit a structured summary return `serde_json::Value::Null` —
+    // the host treats missing summary as "no structured info, use the
+    // existing output text".
+    let result: Result<(String, serde_json::Value)> = match tool_name {
+        "mofa_slides" => plugin_slides(&args, &mofa_root, &cfg, cancel),
+        "mofa_cards" => plugin_cards(&args, &mofa_root, &cfg).map(|s| (s, serde_json::Value::Null)),
+        "mofa_comic" => plugin_comic(&args, &mofa_root, &cfg).map(|s| (s, serde_json::Value::Null)),
+        "mofa_infographic" => {
+            plugin_infographic(&args, &mofa_root, &cfg).map(|s| (s, serde_json::Value::Null))
+        }
+        "mofa_video" => plugin_video(&args, &mofa_root, &cfg).map(|s| (s, serde_json::Value::Null)),
         _ => Err(eyre::eyre!("unknown tool: {tool_name}")),
     };
 
     match result {
-        Ok(output) => {
-            println!("{}", serde_json::json!({"output": output, "success": true}));
+        Ok((output, summary)) => {
+            emit_v2_progress("complete", &format!("{tool_name} complete"), Some(1.0));
+            let mut payload = serde_json::json!({
+                "output": output,
+                "success": true,
+            });
+            if !summary.is_null() {
+                payload["summary"] = summary;
+            }
+            println!("{payload}");
         }
         Err(e) => {
             println!(
@@ -367,7 +389,12 @@ fn plugin_slides(
     args: &serde_json::Value,
     mofa_root: &std::path::Path,
     cfg: &config::MofaConfig,
-) -> Result<String> {
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<(String, serde_json::Value)> {
+    use crate::protocol_v2::{check_cancel, emit_v2_progress};
+
+    emit_v2_progress("validating", "Resolving slide inputs", Some(0.05));
+
     let style_name = args
         .get("style")
         .and_then(|v| v.as_str())
@@ -491,7 +518,18 @@ fn plugin_slides(
 
     std::fs::create_dir_all(&slide_dir).ok();
 
-    let batch = args.get("api").and_then(|v| v.as_str()).unwrap_or("rt") == "batch";
+    check_cancel(cancel);
+    let api_mode = args.get("api").and_then(|v| v.as_str()).unwrap_or("rt");
+    let batch = api_mode == "batch";
+
+    let n_slides = slides.len();
+    let composing_message =
+        format!("Composing {n_slides} slide(s) (style={style_name}, mode={api_mode})");
+    emit_v2_progress("composing", &composing_message, Some(0.10));
+
+    let render_message = format!("Rendering {n_slides} slide(s) via Gemini");
+    emit_v2_progress("rendering", &render_message, Some(0.30));
+
     pipeline::slides::run(
         &slide_dir,
         &out,
@@ -507,7 +545,40 @@ fn plugin_slides(
         batch,
     )?;
 
-    Ok(format!("Generated PPTX: {}", out.display()))
+    check_cancel(cancel);
+    emit_v2_progress("delivering", "Writing PPTX output", Some(0.95));
+
+    // Roll-up cost event. Slides invoke Gemini for image generation
+    // (not LLM token-billed) and optionally Dashscope/Qwen-Edit for
+    // refinement; neither client surfaces token usage today, so we
+    // report `n_slides` as `tokens_in` (one prompt per slide) and the
+    // images-rendered count as `tokens_out`. The host's per-task cost
+    // panel groups by provider, so a single event per invocation is
+    // sufficient for attribution. Per-call cost wiring would require
+    // an invasive refactor of gemini.rs / dashscope.rs and is tracked
+    // separately. usd is None — the model catalog already prices
+    // gemini-2.0-flash-image when present.
+    let provider = if batch { "google-batch" } else { "google" };
+    let model = gen_model.unwrap_or("gemini-2.0-flash-image");
+    let n_slides_u32 = n_slides.min(u32::MAX as usize) as u32;
+    crate::protocol_v2::emit_v2_cost(provider, model, n_slides_u32, n_slides_u32, None);
+
+    // Build the v2 result summary so the host's SubAgentSummaryGenerator
+    // can render a per-task card without re-running an LLM. The
+    // `kind` discriminator follows protocol-v2.md §2.5's
+    // `plugin:<name>:<phase>` convention.
+    let summary = serde_json::json!({
+        "kind": "plugin:mofa_slides:render",
+        "n_slides": n_slides,
+        "style": style_name,
+        "auto_layout": auto_layout,
+        "refine": refine,
+        "image_size": image_size,
+        "api_mode": api_mode,
+        "output_path": out.to_string_lossy(),
+    });
+
+    Ok((format!("Generated PPTX: {}", out.display()), summary))
 }
 
 fn plugin_cards(
@@ -791,10 +862,16 @@ fn plugin_video(
 fn main() -> Result<()> {
     color_eyre::install()?;
 
+    // Plugin-protocol-v2 cancel signal (M8 W4). The handler thread
+    // captures SIGTERM, sets a shared flag, and exits 130 within the
+    // host's 10-second cancel budget. Long-running plugin paths (slides
+    // rendering loop) poll the flag at checkpoints to unwind cleanly.
+    let cancel = protocol_v2::install_sigterm_handler();
+
     // Plugin protocol: if argv[1] looks like a tool name (contains '_'), use plugin mode
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 2 && args[1].starts_with("mofa_") {
-        return run_plugin(&args[1]);
+        return run_plugin(&args[1], &cancel);
     }
 
     let cli = Cli::parse();
