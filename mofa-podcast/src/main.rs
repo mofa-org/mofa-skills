@@ -2,11 +2,21 @@
 //!
 //! Protocol: `./mofa-podcast <tool_name>` with JSON on stdin, JSON on stdout.
 //! Reuses ominix-api (same as mofa-fm) for TTS synthesis.
+//!
+//! Plugin protocol v2 (M8 Runtime Parity): emits structured stderr events
+//! ({"type":"progress",...}, {"type":"cost",...}) and an extended stdout
+//! result with `summary`/`cost` fields. SIGTERM is honoured: the handler
+//! sets a shared cancel flag that the per-segment generation loop polls
+//! between TTS calls so we exit within the host's 10-second cancel
+//! budget. ffmpeg children inherit our process group, so the host's
+//! `kill -SIGTERM -<pgid>` reaches them too.
 
 use std::collections::BTreeMap;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use regex::Regex;
@@ -19,6 +29,98 @@ const PRESET_VOICES: &[&str] = &[
     "vivian", "serena", "ryan", "aiden", "eric", "dylan", "uncle_fu", "ono_anna", "sohee",
 ];
 const SEGMENT_TAIL_PADDING_MS: u32 = 250;
+
+// ── Plugin protocol v2 helpers ───────────────────────────────────────
+//
+// See `crates/octos-plugin/docs/protocol-v2.md` in the octos repo for
+// the wire spec. The host parses any stderr line starting with `{` as
+// a structured event and falls back to legacy text-progress for
+// anything else, so existing free-form `eprintln!` lines keep working.
+
+/// Emit a `progress` event. `stage` is a stable lowercase snake_case
+/// label (e.g. `"synthesizing_voices"`); `message` is human-readable;
+/// `progress` is an optional fraction in `[0, 1]`.
+fn emit_v2_progress(stage: &str, message: &str, progress: Option<f64>) {
+    let event = json!({
+        "type": "progress",
+        "stage": stage,
+        "message": message,
+        "progress": progress,
+    });
+    match serde_json::to_string(&event) {
+        Ok(line) => eprintln!("{line}"),
+        Err(_) => eprintln!("[{stage}] {message}"),
+    }
+}
+
+/// Emit a `cost` event for ledger attribution. TTS isn't a metered LLM
+/// so we use input character count for `tokens_in` and PCM-payload byte
+/// count for `tokens_out` as proxies — the host's per-task cost panel
+/// can still group by provider.
+fn emit_v2_cost(provider: &str, model: &str, tokens_in: u32, tokens_out: u32, usd: Option<f64>) {
+    let event = json!({
+        "type": "cost",
+        "provider": provider,
+        "model": model,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "usd": usd,
+    });
+    match serde_json::to_string(&event) {
+        Ok(line) => eprintln!("{line}"),
+        Err(_) => eprintln!("[cost] {provider}/{model} in={tokens_in} out={tokens_out}"),
+    }
+}
+
+/// Install a SIGTERM handler that sets a shared cancel flag. The
+/// per-segment generation loop polls `check_cancel(&flag)` between
+/// TTS calls so we unwind cleanly. ffmpeg children spawned from this
+/// process inherit the same process group as us, so the host's
+/// `kill -SIGTERM -<pgid>` propagates to them as well.
+fn install_sigterm_handler() -> Arc<AtomicBool> {
+    let cancel = Arc::new(AtomicBool::new(false));
+    #[cfg(unix)]
+    {
+        use signal_hook::consts::SIGTERM;
+        use signal_hook::iterator::Signals;
+        let cancel_for_handler = cancel.clone();
+        // Spawn a dedicated thread because we use blocking reqwest;
+        // there is no async runtime to host a tokio signal future.
+        std::thread::spawn(move || match Signals::new([SIGTERM]) {
+            Ok(mut signals) => {
+                if signals.forever().next().is_some() {
+                    cancel_for_handler.store(true, Ordering::SeqCst);
+                    emit_v2_progress(
+                        "cleanup",
+                        "SIGTERM received, shutting down mofa-podcast",
+                        None,
+                    );
+                    // Brief pause so any in-flight write settles. The
+                    // generation loop also calls `check_cancel` between
+                    // segments to unwind cleanly via the SegmentDir Drop
+                    // impl, which removes the per-run scratch directory.
+                    std::thread::sleep(Duration::from_millis(100));
+                    std::process::exit(130);
+                }
+            }
+            Err(e) => {
+                eprintln!("[mofa-podcast] failed to install SIGTERM handler: {e}");
+            }
+        });
+    }
+    cancel
+}
+
+/// If the cancel flag fires while we're between checkpoints, exit
+/// cleanly. The signal-handler thread also calls exit(130) on its own,
+/// but doing it here means the caller's stack unwinds, which runs the
+/// `SegmentDirCleanup` Drop impl (clearing the scratch directory).
+fn check_cancel(cancel: &AtomicBool) {
+    if cancel.load(Ordering::Acquire) {
+        emit_v2_progress("cleanup", "Cancelled at checkpoint, exiting", None);
+        std::process::exit(130);
+    }
+}
 
 // ── Emotion → TTS prompt mapping ───────────────────────────────────
 
@@ -1221,13 +1323,14 @@ fn handle_voices(_input_json: &str) {
     succeed(&out);
 }
 
-fn handle_generate(input_json: &str) {
+fn handle_generate(input_json: &str, cancel: &AtomicBool) {
+    emit_v2_progress("init", "Parsing podcast generate request", Some(0.0));
     let input: GenerateInput = match serde_json::from_str(input_json) {
         Ok(v) => v,
         Err(e) => fail(&format!("Invalid input: {e}")),
     };
 
-    match generate_podcast(input) {
+    match generate_podcast(input, cancel) {
         Ok(out) => {
             println!("{out}");
             std::process::exit(0);
@@ -1236,7 +1339,10 @@ fn handle_generate(input_json: &str) {
     }
 }
 
-fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
+fn generate_podcast(
+    input: GenerateInput,
+    cancel: &AtomicBool,
+) -> Result<serde_json::Value, String> {
     // Read script content
     let script = if let Some(s) = input.script {
         s
@@ -1364,20 +1470,38 @@ fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
     let mut errors: Vec<String> = Vec::new();
     let total = builtin_segments.len() + clone_segments.len();
     let mut completed = 0;
+    let mut total_chars_in: u64 = 0;
+    let mut total_pcm_bytes_out: u64 = 0;
 
     // Phase 1: Built-in voices
     eprintln!(
         "[podcast] Phase 1: Generating {} built-in voice segments...",
         builtin_segments.len()
     );
+    emit_v2_progress(
+        "synthesizing_voices",
+        &format!(
+            "Phase 1: synthesizing {} built-in voice segments",
+            builtin_segments.len()
+        ),
+        Some(0.05),
+    );
     for (seg_id, voice, emotion, text, character) in &builtin_segments {
+        check_cancel(cancel);
         let seg_path = segment_file_path(&seg_dir, voice, *seg_id);
         completed += 1;
-        eprintln!(
-            "[podcast] [{completed}/{total}] {character} ({voice}, {emotion}): {}...",
-            &text.chars().take(20).collect::<String>()
+        let preview: String = text.chars().take(20).collect();
+        eprintln!("[podcast] [{completed}/{total}] {character} ({voice}, {emotion}): {preview}...");
+        // Roll the per-segment progress fraction across the synth phase
+        // (0.05 → 0.65 spans both built-in and clone segments).
+        let fraction = 0.05 + 0.60 * (completed as f64 / total.max(1) as f64);
+        emit_v2_progress(
+            "synthesizing_voices",
+            &format!("[{completed}/{total}] {character} ({voice}, {emotion})"),
+            Some(fraction.min(0.65)),
         );
 
+        let chars_in = text.chars().count() as u32;
         match generate_tts_segment(
             &client,
             &base_url,
@@ -1387,7 +1511,18 @@ fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
             emotion,
             &seg_path.to_string_lossy(),
         ) {
-            Ok(()) => {}
+            Ok(()) => {
+                let pcm_bytes = std::fs::metadata(&seg_path).map(|m| m.len()).unwrap_or(0);
+                total_chars_in += chars_in as u64;
+                total_pcm_bytes_out += pcm_bytes;
+                emit_v2_cost(
+                    "ominix",
+                    "ominix-tts-qwen3",
+                    chars_in,
+                    pcm_bytes.min(u32::MAX as u64) as u32,
+                    None,
+                );
+            }
             Err(e) => {
                 eprintln!("[podcast] ERROR seg_{seg_id:03}: {e}");
                 errors.push(format!("seg_{seg_id:03} ({character}): {e}"));
@@ -1401,14 +1536,30 @@ fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
             "[podcast] Phase 2: Generating {} cloned voice segments...",
             clone_segments.len()
         );
+        emit_v2_progress(
+            "synthesizing_voices",
+            &format!(
+                "Phase 2: synthesizing {} cloned voice segments",
+                clone_segments.len()
+            ),
+            Some(0.35),
+        );
         for (seg_id, voice, emotion, text, character) in &clone_segments {
+            check_cancel(cancel);
             let seg_path = segment_file_path(&seg_dir, voice, *seg_id);
             completed += 1;
+            let preview: String = text.chars().take(20).collect();
             eprintln!(
-                "[podcast] [{completed}/{total}] {character} (clone:{voice}, {emotion}): {}...",
-                &text.chars().take(20).collect::<String>()
+                "[podcast] [{completed}/{total}] {character} (clone:{voice}, {emotion}): {preview}..."
+            );
+            let fraction = 0.05 + 0.60 * (completed as f64 / total.max(1) as f64);
+            emit_v2_progress(
+                "synthesizing_voices",
+                &format!("[{completed}/{total}] {character} (clone:{voice}, {emotion})"),
+                Some(fraction.min(0.65)),
             );
 
+            let chars_in = text.chars().count() as u32;
             match generate_tts_segment(
                 &client,
                 &base_url,
@@ -1418,7 +1569,18 @@ fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
                 emotion,
                 &seg_path.to_string_lossy(),
             ) {
-                Ok(()) => {}
+                Ok(()) => {
+                    let pcm_bytes = std::fs::metadata(&seg_path).map(|m| m.len()).unwrap_or(0);
+                    total_chars_in += chars_in as u64;
+                    total_pcm_bytes_out += pcm_bytes;
+                    emit_v2_cost(
+                        "ominix",
+                        "ominix-tts-clone",
+                        chars_in,
+                        pcm_bytes.min(u32::MAX as u64) as u32,
+                        None,
+                    );
+                }
                 Err(e) => {
                     eprintln!("[podcast] ERROR seg_{seg_id:03}: {e}");
                     errors.push(format!("seg_{seg_id:03} ({character}): {e}"));
@@ -1427,8 +1589,11 @@ fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
         }
     }
 
+    check_cancel(cancel);
+
     // Phase 3: Assemble timeline
     eprintln!("[podcast] Phase 3: Assembling timeline...");
+    emit_v2_progress("mixing", "Phase 3: assembling segment timeline", Some(0.7));
     let mut timeline_wavs: Vec<String> = Vec::new();
     let mut assembled_dialogue_segments = 0usize;
 
@@ -1483,7 +1648,10 @@ fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
         ));
     }
 
+    check_cancel(cancel);
+
     // Concatenate all WAVs
+    emit_v2_progress("mixing", "Concatenating WAV segments", Some(0.85));
     let concat_wav = output_dir.join(format!("podcast_full_{}.wav", timestamp()));
     if let Err(e) = concatenate_wavs(&timeline_wavs, &concat_wav.to_string_lossy()) {
         return Err(attach_script_fix_context(
@@ -1494,6 +1662,7 @@ fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
     }
 
     // Convert to MP3
+    emit_v2_progress("mixing", "Converting WAV to MP3", Some(0.92));
     let final_audio = finalize_audio_output(&concat_wav.to_string_lossy());
 
     // Ensure absolute path for files_to_send (crew needs absolute paths for auto-delivery)
@@ -1538,6 +1707,27 @@ fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
         output_msg.push_str(&format!("\n- Normalized script: {path}"));
     }
 
+    // Roll up the per-segment v2 cost events into the result. Each
+    // segment also emitted a stderr `cost` event which the host
+    // de-duplicates against this stdout summary.
+    let n_speakers = builtin_segments
+        .iter()
+        .map(|s| &s.1)
+        .chain(clone_segments.iter().map(|s| &s.1))
+        .collect::<std::collections::BTreeSet<_>>()
+        .len() as u32;
+    let total_chars_in_u32 = total_chars_in.min(u32::MAX as u64) as u32;
+    let total_pcm_bytes_out_u32 = total_pcm_bytes_out.min(u32::MAX as u64) as u32;
+
+    emit_v2_progress(
+        "complete",
+        &format!(
+            "Podcast complete ({} dialogue segments, {} bytes)",
+            dialogue_count, file_size
+        ),
+        Some(1.0),
+    );
+
     Ok(json!({
         "output": output_msg,
         "success": true,
@@ -1546,7 +1736,23 @@ fn generate_podcast(input: GenerateInput) -> Result<serde_json::Value, String> {
             "applied": !repair_messages.is_empty(),
             "messages": repair_messages,
             "normalized_script_path": normalized_script_path,
-        }
+        },
+        "summary": {
+            "kind": "plugin:mofa_podcast:generate",
+            "n_dialogue_segments": dialogue_count,
+            "n_speakers": n_speakers,
+            "n_lines": lines.len(),
+            "audio_bytes": file_size,
+            "format": final_audio.format,
+            "builtin_segments": builtin_segments.len(),
+            "clone_segments": clone_segments.len(),
+        },
+        "cost": {
+            "provider": "ominix",
+            "model": "ominix-tts-mixed",
+            "tokens_in": total_chars_in_u32,
+            "tokens_out": total_pcm_bytes_out_u32,
+        },
     }))
 }
 
@@ -1576,6 +1782,78 @@ fn timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Plugin protocol v2 event shapes ──────────────────────────────
+    //
+    // We can't easily intercept stderr from `emit_v2_*`, but the host's
+    // contract is that any stderr line starting with `{` parses as a
+    // v2 event. These tests pin the JSON shapes we send so a future
+    // refactor can't silently drop a required field.
+
+    #[test]
+    fn v2_progress_event_has_required_fields() {
+        let event = json!({
+            "type": "progress",
+            "stage": "synthesizing_voices",
+            "message": "[3/12] Host (vivian, cheerful)",
+            "progress": 0.25,
+        });
+        assert_eq!(event["type"], "progress");
+        assert_eq!(event["stage"], "synthesizing_voices");
+        assert!(event["message"].is_string());
+        let p = event["progress"].as_f64().expect("progress is f64");
+        assert!((0.0..=1.0).contains(&p));
+        let line = serde_json::to_string(&event).expect("serialize");
+        assert!(!line.contains('\n'));
+    }
+
+    #[test]
+    fn v2_cost_event_has_required_fields() {
+        let event = json!({
+            "type": "cost",
+            "provider": "ominix",
+            "model": "ominix-tts-qwen3",
+            "tokens_in": 80u32,
+            "tokens_out": 192_000u32,
+            "usd": serde_json::Value::Null,
+        });
+        assert_eq!(event["type"], "cost");
+        assert!(event["provider"].is_string());
+        assert!(event["tokens_in"].as_u64().is_some());
+        assert!(event["tokens_out"].as_u64().is_some());
+    }
+
+    #[test]
+    fn v2_result_summary_uses_plugin_kind_prefix() {
+        // Mirrors the result JSON shape we emit at the end of
+        // `generate_podcast`. The `kind` discriminator must use the
+        // `plugin:<name>:<phase>` prefix per protocol-v2.md §2.5.
+        let result = json!({
+            "output": "Podcast generated",
+            "success": true,
+            "summary": {
+                "kind": "plugin:mofa_podcast:generate",
+                "n_dialogue_segments": 12,
+                "n_speakers": 3u32,
+                "n_lines": 14,
+                "audio_bytes": 1_048_576u64,
+                "format": "mp3",
+                "builtin_segments": 8,
+                "clone_segments": 4,
+            },
+            "cost": {
+                "provider": "ominix",
+                "model": "ominix-tts-mixed",
+                "tokens_in": 480u32,
+                "tokens_out": 1_152_000u32,
+            },
+        });
+        let kind = result["summary"]["kind"]
+            .as_str()
+            .expect("summary.kind is string");
+        assert!(kind.starts_with("plugin:mofa_podcast:"));
+        assert_eq!(result["cost"]["provider"], "ominix");
+    }
 
     // ── Script parser tests ────────────────────────────────────────
 
@@ -1848,17 +2126,25 @@ mod tests {
     fn parse_known_speaker_repairs_generic_voice_aliases() {
         let script = "[杨幂 - nova, calm] 大家好。\n[窦文涛 - alloy, calm] 今天我们聊新闻。";
         let report = parse_script_report(script);
-        assert!(report.invalid_lines.is_empty(), "{:?}", report.invalid_lines);
+        assert!(
+            report.invalid_lines.is_empty(),
+            "{:?}",
+            report.invalid_lines
+        );
         assert_eq!(report.repair_summary.repaired_known_speaker_voices, 2);
         match &report.lines[0] {
-            ScriptLine::Dialogue { voice, is_clone, .. } => {
+            ScriptLine::Dialogue {
+                voice, is_clone, ..
+            } => {
                 assert_eq!(voice, "yangmi");
                 assert!(*is_clone);
             }
             _ => panic!("Expected Dialogue"),
         }
         match &report.lines[1] {
-            ScriptLine::Dialogue { voice, is_clone, .. } => {
+            ScriptLine::Dialogue {
+                voice, is_clone, ..
+            } => {
                 assert_eq!(voice, "douwentao");
                 assert!(*is_clone);
             }
@@ -1936,12 +2222,10 @@ mod tests {
     fn validate_and_fix_script_markdown_rewrites_known_speaker_voice_aliases() {
         let script = "[杨幂 - nova, calm] 大家好。";
         let prepared = validate_and_fix_script_markdown(script).unwrap();
-        assert!(
-            prepared
-                .repair_messages
-                .iter()
-                .any(|message| message.contains("known speaker voice alias"))
-        );
+        assert!(prepared
+            .repair_messages
+            .iter()
+            .any(|message| message.contains("known speaker voice alias")));
         assert_eq!(
             prepared.repaired_markdown.as_deref(),
             Some("[杨幂 - clone:yangmi, calm] 大家好。")
@@ -1955,7 +2239,8 @@ mod tests {
             script_path: None,
             output_dir: Some(format!("/tmp/mofa-podcast-test-{}", timestamp())),
         };
-        let err = generate_podcast(input).unwrap_err();
+        let cancel = AtomicBool::new(false);
+        let err = generate_podcast(input, &cancel).unwrap_err();
         assert!(err.contains("voice"), "{err}");
     }
 
@@ -1967,7 +2252,8 @@ mod tests {
             script_path: None,
             output_dir: Some(output_dir.to_string_lossy().to_string()),
         };
-        let err = generate_podcast(input).unwrap_err();
+        let cancel = AtomicBool::new(false);
+        let err = generate_podcast(input, &cancel).unwrap_err();
         assert!(err.contains("unknown voice"));
         assert!(err.contains("Normalized script:"));
 
@@ -2178,7 +2464,8 @@ mod tests {
             script_path: None,
             output_dir: Some(format!("/tmp/mofa-podcast-test-{}", timestamp())),
         };
-        let err = generate_podcast(input).unwrap_err();
+        let cancel = AtomicBool::new(false);
+        let err = generate_podcast(input, &cancel).unwrap_err();
         assert!(err.contains("unknown voice"));
     }
 
@@ -2189,7 +2476,8 @@ mod tests {
             script_path: None,
             output_dir: Some(format!("/tmp/mofa-podcast-test-{}", timestamp())),
         };
-        let err = generate_podcast(input).unwrap_err();
+        let cancel = AtomicBool::new(false);
+        let err = generate_podcast(input, &cancel).unwrap_err();
         assert!(err.contains("malformed non-metadata lines"));
     }
 
@@ -2253,6 +2541,11 @@ fn main() {
         fail("mofa-podcast requires macOS (ominix-api TTS is Apple Silicon only)");
     }
 
+    // Plugin-protocol-v2 cancel signal (M8 W4). The thread captures
+    // SIGTERM, sets the flag, and exits 130 on its own; the segment
+    // generation loop also polls the flag for clean unwinding.
+    let cancel = install_sigterm_handler();
+
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
         fail("Usage: mofa-podcast <tool_name>  (podcast_voices | podcast_generate)");
@@ -2265,7 +2558,7 @@ fn main() {
 
     match args[1].as_str() {
         "podcast_voices" => handle_voices(&input),
-        "podcast_generate" => handle_generate(&input),
+        "podcast_generate" => handle_generate(&input, &cancel),
         other => fail(&format!(
             "Unknown tool: {other}. Available: podcast_voices, podcast_generate"
         )),
