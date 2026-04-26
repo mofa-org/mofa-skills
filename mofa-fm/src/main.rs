@@ -2,11 +2,19 @@
 //!
 //! Protocol: `./main <tool_name>` with JSON on stdin, JSON on stdout.
 //! Requires OMINIX_API_URL and OCTOS_DATA_DIR environment variables.
+//!
+//! Plugin protocol v2 (M8 Runtime Parity): emits structured stderr events
+//! ({"type":"progress",...}, {"type":"cost",...}) and an extended stdout
+//! result with `summary`/`cost` fields. SIGTERM is honoured: the handler
+//! sets a shared cancel flag so the next checkpoint exits cleanly with
+//! status 130 within the host's 10-second cancel budget.
 
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -19,6 +27,103 @@ const PRESET_VOICES: &[&str] = &[
 ];
 const WAV_HEADER_BYTES: usize = 44;
 const MIN_TTS_AUDIO_PAYLOAD_BYTES: usize = 1024;
+
+// ── Plugin protocol v2 helpers ───────────────────────────────────────
+//
+// See `crates/octos-plugin/docs/protocol-v2.md` in the octos repo for
+// the wire spec. The host parses any stderr line that starts with `{`
+// as a structured event and falls back to legacy text-progress for
+// anything else, so we can adopt v2 incrementally without breaking
+// older hosts.
+
+/// Emit a `progress` event. `stage` should be a stable lowercase
+/// snake_case label; `message` is human-readable; `progress` is an
+/// optional fraction in `[0, 1]`. Best-effort: serialization failure
+/// degrades to a legacy text line so the user still sees something.
+fn emit_v2_progress(stage: &str, message: &str, progress: Option<f64>) {
+    let event = json!({
+        "type": "progress",
+        "stage": stage,
+        "message": message,
+        "progress": progress,
+    });
+    match serde_json::to_string(&event) {
+        Ok(line) => eprintln!("{line}"),
+        Err(_) => eprintln!("[{stage}] {message}"),
+    }
+}
+
+/// Emit a `cost` event for ledger attribution. `tokens_in` / `tokens_out`
+/// are u32 — for TTS we use input character count and output PCM-byte
+/// count as proxies so the cost panel can still render a per-call row.
+fn emit_v2_cost(provider: &str, model: &str, tokens_in: u32, tokens_out: u32, usd: Option<f64>) {
+    let event = json!({
+        "type": "cost",
+        "provider": provider,
+        "model": model,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "usd": usd,
+    });
+    match serde_json::to_string(&event) {
+        Ok(line) => eprintln!("{line}"),
+        Err(_) => eprintln!("[cost] {provider}/{model} in={tokens_in} out={tokens_out}"),
+    }
+}
+
+/// Install a SIGTERM handler that sets a shared cancel flag. Long-running
+/// loops should `check_cancel(&flag)` between checkpoints so we exit with
+/// status 130 within the host's 10-second cancel budget. Drops in-flight
+/// HTTP and the partial WAV automatically because the process exits.
+///
+/// Windows has no SIGTERM; the host falls back to job-object kill on the
+/// platforms where this binary doesn't run anyway (mofa-fm is darwin-only,
+/// gated by `requires.os` in manifest.json).
+fn install_sigterm_handler() -> Arc<AtomicBool> {
+    let cancel = Arc::new(AtomicBool::new(false));
+    #[cfg(unix)]
+    {
+        use signal_hook::consts::SIGTERM;
+        use signal_hook::iterator::Signals;
+        let cancel_for_handler = cancel.clone();
+        // Spawn a dedicated thread because we use blocking reqwest;
+        // there is no async runtime to host a tokio signal future.
+        std::thread::spawn(move || match Signals::new([SIGTERM]) {
+            Ok(mut signals) => {
+                // We only need the *first* SIGTERM — once we've seen it
+                // we set the flag and exit, so a `for` loop would never
+                // iterate twice. `next()` keeps the intent clear and
+                // satisfies clippy::never_loop.
+                if signals.forever().next().is_some() {
+                    cancel_for_handler.store(true, Ordering::SeqCst);
+                    // Best-effort final progress event so the operator
+                    // sees why we're exiting in the chat UI.
+                    emit_v2_progress("cleanup", "SIGTERM received, shutting down mofa-fm", None);
+                    // Give a brief moment for any in-flight write to
+                    // settle before slamming the process closed.
+                    std::thread::sleep(Duration::from_millis(100));
+                    std::process::exit(130);
+                }
+            }
+            Err(e) => {
+                eprintln!("[mofa-fm] failed to install SIGTERM handler: {e}");
+            }
+        });
+    }
+    cancel
+}
+
+/// If the cancel flag fires while we're between checkpoints, exit cleanly
+/// without trying to finish the current TTS request. The signal-handler
+/// thread also calls exit(130) eventually, but doing it here means the
+/// caller's stack is unwound cleanly (Drop of the segment dir cleanup
+/// guard, etc.).
+fn check_cancel(cancel: &AtomicBool) {
+    if cancel.load(Ordering::Acquire) {
+        emit_v2_progress("cleanup", "Cancelled at checkpoint, exiting", None);
+        std::process::exit(130);
+    }
+}
 
 // ── Input types ──────────────────────────────────────────────────────
 
@@ -685,7 +790,8 @@ fn classify_voice_entries(catalog: &[String], registered: &[String]) -> Vec<(Str
 
 // ── fm_tts ───────────────────────────────────────────────────────────
 
-fn handle_tts(input_json: &str) {
+fn handle_tts(input_json: &str, cancel: &AtomicBool) {
+    emit_v2_progress("init", "Parsing TTS request", Some(0.0));
     let input: TtsInput = match serde_json::from_str(input_json) {
         Ok(v) => v,
         Err(e) => fail(&format!("Invalid input: {e}")),
@@ -694,7 +800,10 @@ fn handle_tts(input_json: &str) {
     if input.text.trim().is_empty() {
         fail("'text' must not be empty");
     }
+    let input_chars = input.text.chars().count() as u32;
 
+    check_cancel(cancel);
+    emit_v2_progress("validating", "Checking ominix-api health", Some(0.05));
     let client = http_client();
     let base_url = ominix_base_url();
     if let Err(e) = check_health(&client, &base_url) {
@@ -757,6 +866,13 @@ fn handle_tts(input_json: &str) {
             eprintln!("Warning: could not verify voice against /v1/voices ({e}); proceeding.");
         }
     }
+
+    check_cancel(cancel);
+    emit_v2_progress(
+        "synthesizing",
+        &format!("Synthesizing {input_chars} chars with voice '{voice_name}'"),
+        Some(0.2),
+    );
 
     let wav_bytes = if let Some(ref_path) = resolve_custom_voice(&voice_name) {
         // Custom voice → /v1/audio/tts/clone (multipart with raw WAV)
@@ -840,6 +956,10 @@ fn handle_tts(input_json: &str) {
     if let Err(e) = validate_wav_payload(&wav_bytes) {
         fail(&e);
     }
+    let pcm_bytes = wav_data_payload_len(&wav_bytes).unwrap_or(0) as u32;
+
+    check_cancel(cancel);
+    emit_v2_progress("delivering", "Writing WAV output", Some(0.85));
 
     if let Err(e) = std::fs::write(&wav_output_path, &wav_bytes) {
         fail(&format!("Failed to write {wav_output_path}: {e}"));
@@ -851,18 +971,51 @@ fn handle_tts(input_json: &str) {
     } else {
         try_convert_to_mp3(&wav_output_path, &requested_output_path)
     };
-    let voice_label = if resolve_custom_voice(&voice_name).is_some() {
-        format!("{voice_name} (custom)")
+    let is_custom = resolve_custom_voice(&voice_name).is_some();
+    let voice_label = if is_custom {
+        format!("{} (custom)", voice_name)
     } else {
-        voice_name
+        voice_name.clone()
     };
+
+    // v2 cost event: TTS isn't a metered LLM, but the host's per-task
+    // cost panel still wants a `cost` row attributable to this call so
+    // it can group by provider. We use input character count as
+    // tokens_in (rough proxy) and PCM payload bytes as tokens_out.
+    // usd is None — the model catalog doesn't price ominix-api yet.
+    let model_label = if is_custom {
+        "ominix-tts-clone"
+    } else {
+        "ominix-tts-qwen3"
+    };
+    emit_v2_cost("ominix", model_label, input_chars, pcm_bytes, None);
+
+    emit_v2_progress(
+        "complete",
+        &format!("TTS complete ({duration_secs:.1}s audio)"),
+        Some(1.0),
+    );
 
     // Output files_to_send so the agent auto-delivers to the user.
     // Don't include file path in output — prevents LLM from also calling send_file.
     let out = json!({
         "output": format!("Audio generated and sent to user ({duration_secs:.1}s, voice: {voice_label})."),
         "success": true,
-        "files_to_send": [&final_path]
+        "files_to_send": [&final_path],
+        "summary": {
+            "kind": "plugin:mofa_fm:tts",
+            "voice": voice_label,
+            "voice_kind": if is_custom { "custom" } else { "preset" },
+            "model": model_label,
+            "input_chars": input_chars,
+            "audio_seconds": duration_secs,
+        },
+        "cost": {
+            "provider": "ominix",
+            "model": model_label,
+            "tokens_in": input_chars,
+            "tokens_out": pcm_bytes,
+        },
     });
     println!("{out}");
     std::process::exit(0);
@@ -870,7 +1023,8 @@ fn handle_tts(input_json: &str) {
 
 // ── fm_voice_save ────────────────────────────────────────────────────
 
-fn handle_voice_save(input_json: &str) {
+fn handle_voice_save(input_json: &str, cancel: &AtomicBool) {
+    emit_v2_progress("init", "Parsing voice save request", Some(0.0));
     let input: VoiceSaveInput = match serde_json::from_str(input_json) {
         Ok(v) => v,
         Err(e) => fail(&format!("Invalid input: {e}")),
@@ -888,6 +1042,7 @@ fn handle_voice_save(input_json: &str) {
         ));
     }
 
+    emit_v2_progress("validating", "Validating reference audio", Some(0.1));
     let src = Path::new(&input.audio_path);
     if !src.exists() {
         fail(&format!("Audio file not found: {}", input.audio_path));
@@ -910,6 +1065,13 @@ fn handle_voice_save(input_json: &str) {
         fail(&format!("Failed to create voices directory: {e}"));
     }
 
+    check_cancel(cancel);
+    emit_v2_progress(
+        "synthesizing",
+        "Normalizing reference audio to WAV",
+        Some(0.4),
+    );
+
     // Normalize reference audio to a real WAV file so uploaded MP3/M4A/OGG
     // samples work reliably with downstream voice cloning.
     let filename = format!("{name}.wav");
@@ -918,20 +1080,34 @@ fn handle_voice_save(input_json: &str) {
         fail(&e);
     }
 
+    emit_v2_progress("delivering", "Updating voice registry", Some(0.85));
+
     // Update registry
     let mut reg = load_registry();
     reg.voices.insert(
         name.clone(),
         VoiceEntry {
-            file: filename,
+            file: filename.clone(),
             created: Some(now_iso()),
         },
     );
     save_registry(&reg);
 
-    succeed(&format!(
-        "Voice '{name}' saved successfully. Use it with fm_tts by setting voice to '{name}'."
-    ));
+    emit_v2_progress("complete", &format!("Voice '{name}' saved"), Some(1.0));
+
+    let out = json!({
+        "output": format!(
+            "Voice '{name}' saved successfully. Use it with fm_tts by setting voice to '{name}'."
+        ),
+        "success": true,
+        "summary": {
+            "kind": "plugin:mofa_fm:voice_save",
+            "voice": name,
+            "filename": filename,
+        },
+    });
+    println!("{out}");
+    std::process::exit(0);
 }
 
 // ── fm_voice_list ────────────────────────────────────────────────────
@@ -1090,7 +1266,82 @@ mod tests {
         validate_requested_voice, validate_wav_payload, voice_in_registry, VoiceStatus,
         MIN_TTS_AUDIO_PAYLOAD_BYTES,
     };
+    use serde_json::json;
     use std::net::TcpListener;
+
+    // ── Plugin protocol v2 event shapes ──────────────────────────────
+    //
+    // We can't easily intercept stderr from `emit_v2_*`, but the host's
+    // contract is "stderr lines that start with `{` parse as v2 events".
+    // These tests pin the JSON shape we send so a future refactor can't
+    // silently drop a required field (the host would fall through to
+    // legacy text and the chat UI would lose the structured stage).
+
+    #[test]
+    fn v2_progress_event_has_required_fields() {
+        let event = json!({
+            "type": "progress",
+            "stage": "synthesizing",
+            "message": "calling ominix-api",
+            "progress": 0.42,
+        });
+        assert_eq!(event["type"], "progress");
+        assert_eq!(event["stage"], "synthesizing");
+        assert!(event["message"].is_string());
+        let p = event["progress"].as_f64().expect("progress is f64");
+        assert!((0.0..=1.0).contains(&p));
+        // Must serialise to a single line — the host parses one event
+        // per stderr line and a multi-line JSON would land in legacy
+        // text.
+        let line = serde_json::to_string(&event).expect("serialize");
+        assert!(!line.contains('\n'));
+    }
+
+    #[test]
+    fn v2_cost_event_has_required_fields() {
+        let event = json!({
+            "type": "cost",
+            "provider": "ominix",
+            "model": "ominix-tts-qwen3",
+            "tokens_in": 25u32,
+            "tokens_out": 48000u32,
+            "usd": serde_json::Value::Null,
+        });
+        assert_eq!(event["type"], "cost");
+        assert!(event["provider"].is_string());
+        assert!(event["tokens_in"].as_u64().is_some());
+        assert!(event["tokens_out"].as_u64().is_some());
+    }
+
+    #[test]
+    fn v2_result_summary_uses_plugin_kind_prefix() {
+        // Mirrors the result JSON shape we emit at the end of
+        // `handle_tts`. The `kind` discriminator must use the
+        // `plugin:<name>:<phase>` prefix per protocol-v2.md §2.5 so
+        // the host's SubAgentSummaryGenerator can route on it.
+        let result = json!({
+            "output": "Audio generated",
+            "success": true,
+            "summary": {
+                "kind": "plugin:mofa_fm:tts",
+                "voice": "vivian",
+                "voice_kind": "preset",
+                "model": "ominix-tts-qwen3",
+                "input_chars": 25u32,
+                "audio_seconds": 4.2,
+            },
+            "cost": {
+                "provider": "ominix",
+                "model": "ominix-tts-qwen3",
+                "tokens_in": 25u32,
+                "tokens_out": 48000u32,
+            },
+        });
+        let summary = &result["summary"];
+        let kind = summary["kind"].as_str().expect("summary.kind is string");
+        assert!(kind.starts_with("plugin:mofa_fm:"));
+        assert!(result["cost"]["provider"].is_string());
+    }
 
     #[test]
     fn requested_mp3_uses_distinct_temp_wav() {
@@ -1336,6 +1587,11 @@ fn main() {
         fail("mofa-fm requires macOS (ominix-api TTS is Apple Silicon only)");
     }
 
+    // Plugin-protocol-v2 cancel signal (M8 W4). The thread captures
+    // SIGTERM, sets the flag, and exits 130 on its own; long-running
+    // tools also poll the flag at checkpoints so they unwind cleanly.
+    let cancel = install_sigterm_handler();
+
     let args: Vec<String> = std::env::args().collect();
     let tool_name = args.get(1).map(|s| s.as_str()).unwrap_or("unknown");
 
@@ -1345,8 +1601,8 @@ fn main() {
     }
 
     match tool_name {
-        "fm_tts" => handle_tts(&buf),
-        "fm_voice_save" => handle_voice_save(&buf),
+        "fm_tts" => handle_tts(&buf, &cancel),
+        "fm_voice_save" => handle_voice_save(&buf, &cancel),
         "fm_voice_list" => handle_voice_list(&buf),
         "fm_voice_delete" => handle_voice_delete(&buf),
         _ => fail(&format!(
