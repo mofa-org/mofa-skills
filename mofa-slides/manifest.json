@@ -10,7 +10,9 @@
   "tools": [
     {
       "name": "mofa_slides",
-      "description": "Generate AI presentation slides with full-bleed Gemini images. Supports multiple styles and editable PPTX mode.",
+      "spawn_only": true,
+      "spawn_only_message": "SUCCESS: Slide generation is now running in background. The PPTX file will be automatically delivered when ready. No further action needed for this request.",
+      "description": "Generate AI presentation slides with full-bleed Gemini images. Supports multiple styles and editable PPTX mode. Runs in background — do NOT wait for it.",
       "input_schema": {
         "type": "object",
         "properties": {

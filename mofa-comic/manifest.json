@@ -10,7 +10,9 @@
   "tools": [
     {
       "name": "mofa_comic",
-      "description": "Generate multi-panel comic strips with AI-generated art.",
+      "spawn_only": true,
+      "spawn_only_message": "SUCCESS: Comic generation is now running in background. The comic image will be automatically delivered when ready. No further action needed for this request.",
+      "description": "Generate multi-panel comic strips with AI-generated art. Runs in background — do NOT wait for it.",
       "input_schema": {
         "type": "object",
         "properties": {

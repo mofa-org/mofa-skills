@@ -10,7 +10,9 @@
   "tools": [
     {
       "name": "mofa_infographic",
-      "description": "Generate multi-section infographics with AI-generated visuals.",
+      "spawn_only": true,
+      "spawn_only_message": "SUCCESS: Infographic generation is now running in background. The infographic image will be automatically delivered when ready. No further action needed for this request.",
+      "description": "Generate multi-section infographics with AI-generated visuals. Runs in background — do NOT wait for it.",
       "input_schema": {
         "type": "object",
         "properties": {

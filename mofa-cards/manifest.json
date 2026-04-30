@@ -10,7 +10,9 @@
   "tools": [
     {
       "name": "mofa_cards",
-      "description": "Generate AI-powered greeting cards and holiday cards as PNG images.",
+      "spawn_only": true,
+      "spawn_only_message": "SUCCESS: Card generation is now running in background. The card images will be automatically delivered when ready. No further action needed for this request.",
+      "description": "Generate AI-powered greeting cards and holiday cards as PNG images. Runs in background — do NOT wait for it.",
       "input_schema": {
         "type": "object",
         "properties": {
