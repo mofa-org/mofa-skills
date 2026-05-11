@@ -918,9 +918,16 @@ fn is_skippable_script_metadata(line: &str) -> bool {
 }
 
 fn parse_script_report(script: &str) -> ScriptParseReport {
+    // BGM/PAUSE regexes accept BOTH ASCII `,`/`s` AND Chinese full-width
+    // `，`/`秒` — LLMs writing Chinese-language scripts naturally produce the
+    // full-width forms; rejecting them at the parser stranded every Chinese
+    // podcast generation request (live failure on dspfac 2026-05-11).
+    // Dialogue regex left unchanged: the comma there separates voice from
+    // emotion and tends to come through in ASCII even in Chinese scripts.
     let dialogue_re = Regex::new(r"^\[([^\]\-]+)\s*-\s*([^\],]+),\s*([^\]]+)\]\s*(.*)$").unwrap();
-    let bgm_re = Regex::new(r"^\[BGM:\s*([^—\-]+)[—\-]\s*([^,]+),\s*(\d+)s?\]").unwrap();
-    let pause_re = Regex::new(r"^\[PAUSE:\s*(\d+)s?\]").unwrap();
+    let bgm_re =
+        Regex::new(r"^\[BGM:\s*([^—\-]+)[—\-]\s*([^,，]+)[,,，]\s*(\d+)\s*[s秒]?\s*\]").unwrap();
+    let pause_re = Regex::new(r"^\[PAUSE:\s*(\d+)\s*[s秒]?\s*\]").unwrap();
 
     let mut lines = Vec::new();
     let mut invalid_lines = Vec::new();
@@ -1949,6 +1956,123 @@ mod tests {
         match &lines[0] {
             ScriptLine::Pause { duration_s } => assert_eq!(*duration_s, 3),
             _ => panic!("Expected Pause"),
+        }
+    }
+
+    // 2026-05-11: Chinese-locale parser support. LLMs writing
+    // Chinese-language podcast scripts naturally produce full-width
+    // comma `，` and the suffix `秒`. Previously rejected with
+    // "Script contains malformed non-metadata lines" stranding every
+    // Chinese podcast; the parser now accepts both forms in BGM/PAUSE
+    // tags. ASCII forms keep working (covered by tests above).
+
+    #[test]
+    fn parse_bgm_with_chinese_second_suffix() {
+        let script = "[BGM: 新闻开场音乐 — 渐入, 5秒]";
+        let lines = parse_script(script);
+        assert_eq!(lines.len(), 1);
+        match &lines[0] {
+            ScriptLine::Bgm {
+                description,
+                fade,
+                duration_s,
+            } => {
+                assert_eq!(description, "新闻开场音乐");
+                assert_eq!(fade, "渐入");
+                assert_eq!(*duration_s, 5);
+            }
+            _ => panic!("Expected Bgm"),
+        }
+    }
+
+    #[test]
+    fn parse_bgm_with_chinese_comma_and_chinese_second_suffix() {
+        // The exact failing line reported on dspfac.crew.ominix.io
+        // 2026-05-11.
+        let script = "[BGM: 新闻开场音乐 — 渐入，5秒]";
+        let lines = parse_script(script);
+        assert_eq!(lines.len(), 1);
+        match &lines[0] {
+            ScriptLine::Bgm {
+                description,
+                fade,
+                duration_s,
+            } => {
+                assert_eq!(description, "新闻开场音乐");
+                assert_eq!(fade, "渐入");
+                assert_eq!(*duration_s, 5);
+            }
+            _ => panic!("Expected Bgm"),
+        }
+    }
+
+    #[test]
+    fn parse_pause_with_chinese_second_suffix() {
+        let script = "[PAUSE: 2秒]";
+        let lines = parse_script(script);
+        assert_eq!(lines.len(), 1);
+        match &lines[0] {
+            ScriptLine::Pause { duration_s } => assert_eq!(*duration_s, 2),
+            _ => panic!("Expected Pause"),
+        }
+    }
+
+    #[test]
+    fn parse_pause_with_chinese_second_suffix_and_internal_space() {
+        // Optional space between number and `秒` — LLMs are
+        // inconsistent about spacing.
+        let script = "[PAUSE: 3 秒]";
+        let lines = parse_script(script);
+        assert_eq!(lines.len(), 1);
+        match &lines[0] {
+            ScriptLine::Pause { duration_s } => assert_eq!(*duration_s, 3),
+            _ => panic!("Expected Pause"),
+        }
+    }
+
+    #[test]
+    fn parse_exact_failing_script_block_from_dspfac_2026_05_11() {
+        // Regression-pin: the verbatim 4 malformed lines reported by the
+        // user on dspfac.crew.ominix.io 2026-05-11. Pre-fix, the parser
+        // reported all 4 as "malformed non-metadata lines"; post-fix,
+        // each must parse cleanly to its BGM/Pause type.
+        let script = "[BGM: 新闻开场音乐 — 渐入，5秒]\n\
+                      [PAUSE: 2秒]\n\
+                      [PAUSE: 3秒]\n\
+                      [BGM: 新闻结束音乐 — 渐出，5秒]";
+        let lines = parse_script(script);
+        assert_eq!(lines.len(), 4, "expected 4 parsed lines, got: {lines:#?}");
+        match &lines[0] {
+            ScriptLine::Bgm {
+                description,
+                fade,
+                duration_s,
+            } => {
+                assert_eq!(description, "新闻开场音乐");
+                assert_eq!(fade, "渐入");
+                assert_eq!(*duration_s, 5);
+            }
+            other => panic!("expected Bgm at index 0, got: {other:?}"),
+        }
+        match &lines[1] {
+            ScriptLine::Pause { duration_s } => assert_eq!(*duration_s, 2),
+            other => panic!("expected Pause at index 1, got: {other:?}"),
+        }
+        match &lines[2] {
+            ScriptLine::Pause { duration_s } => assert_eq!(*duration_s, 3),
+            other => panic!("expected Pause at index 2, got: {other:?}"),
+        }
+        match &lines[3] {
+            ScriptLine::Bgm {
+                description,
+                fade,
+                duration_s,
+            } => {
+                assert_eq!(description, "新闻结束音乐");
+                assert_eq!(fade, "渐出");
+                assert_eq!(*duration_s, 5);
+            }
+            other => panic!("expected Bgm at index 3, got: {other:?}"),
         }
     }
 
