@@ -109,6 +109,16 @@ impl MofaConfig {
         std::env::var("GEMINI_API_KEY").ok()
     }
 
+    /// Resolve the OpenAI API key from config or env.
+    pub fn openai_key(&self) -> Option<String> {
+        if let Some(val) = self.api_keys.get("openai") {
+            if let Some(k) = resolve_key(val) {
+                return Some(k);
+            }
+        }
+        std::env::var("OPENAI_API_KEY").ok()
+    }
+
     /// Resolve the Dashscope API key from config or env.
     pub fn dashscope_key(&self) -> Option<String> {
         if let Some(val) = self.api_keys.get("dashscope") {

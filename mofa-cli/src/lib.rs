@@ -6,6 +6,7 @@ pub mod deepseek_ocr;
 pub mod gemini;
 pub mod image_util;
 pub mod layout;
+pub mod openai;
 pub mod pipeline;
 pub mod pptx;
 pub mod style;

@@ -2,6 +2,7 @@
 
 use crate::config::MofaConfig;
 use crate::gemini::{BatchImageRequest, GeminiClient};
+use crate::openai::OpenAIImageClient;
 use crate::style::Style;
 use eyre::Result;
 use serde::Deserialize;
@@ -29,10 +30,16 @@ pub fn run(
     gen_model: Option<&str>,
     batch: bool,
 ) -> Result<Vec<Option<PathBuf>>> {
-    let gemini_key = cfg
-        .gemini_key()
-        .ok_or_else(|| eyre::eyre!("Gemini API key required"))?;
-    let gemini = GeminiClient::new(gemini_key);
+    let gemini = cfg.gemini_key().map(GeminiClient::new);
+    let openai = cfg.openai_key().map(OpenAIImageClient::new);
+
+    let model = gen_model.unwrap_or(cfg.gen_model());
+    if model.starts_with("gpt-image") && openai.is_none() {
+        eyre::bail!("OpenAI API key required for gpt-image models");
+    }
+    if !model.starts_with("gpt-image") && gemini.is_none() {
+        eyre::bail!("Gemini API key required");
+    }
 
     std::fs::create_dir_all(card_dir)?;
     let total = cards.len();
@@ -48,8 +55,6 @@ pub fn run(
         .cards
         .as_ref()
         .and_then(|c| c.image_size.as_deref()));
-    let model = gen_model.unwrap_or(cfg.gen_model());
-
     let mode_str = if batch {
         "batch, ".to_string()
     } else {
@@ -57,7 +62,7 @@ pub fn run(
     };
     eprintln!("Generating {total} cards ({mode_str}{ar})...");
 
-    let result = if batch {
+    let result = if batch && !model.starts_with("gpt-image") {
         let requests: Vec<BatchImageRequest> = cards
             .iter()
             .map(|card| {
@@ -74,12 +79,13 @@ pub fn run(
                 }
             })
             .collect();
-        match gemini.batch_gen_images(requests) {
+        match gemini.as_ref().unwrap().batch_gen_images(requests) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("Batch failed ({e}), falling back to parallel sync...");
                 gen_cards_sync(
                     &gemini,
+                    &openai,
                     card_dir,
                     cards,
                     style,
@@ -94,6 +100,7 @@ pub fn run(
     } else {
         gen_cards_sync(
             &gemini,
+            &openai,
             card_dir,
             cards,
             style,
@@ -112,7 +119,8 @@ pub fn run(
 
 #[allow(clippy::too_many_arguments)]
 fn gen_cards_sync(
-    gemini: &GeminiClient,
+    gemini: &Option<GeminiClient>,
+    openai: &Option<OpenAIImageClient>,
     card_dir: &Path,
     cards: &[CardInput],
     style: &Style,
@@ -139,15 +147,35 @@ fn gen_cards_sync(
                 let full_prompt = format!("{prefix}\n\n{}", card.prompt);
                 let out_path = card_dir.join(format!("card-{}.png", card.name));
 
-                if let Ok(Some(p)) = gemini.gen_image(
-                    &full_prompt,
-                    &out_path,
-                    size,
-                    Some(ar),
-                    &[],
-                    Some(model),
-                    Some(&card.name),
-                ) {
+                let result = if model.starts_with("gpt-image") {
+                    openai.as_ref().and_then(|oa| {
+                        oa.gen_image(
+                            &full_prompt,
+                            &out_path,
+                            size,
+                            Some(ar),
+                            Some(model),
+                            Some(&card.name),
+                        )
+                        .ok()
+                        .flatten()
+                    })
+                } else {
+                    gemini.as_ref().and_then(|gem| {
+                        gem.gen_image(
+                            &full_prompt,
+                            &out_path,
+                            size,
+                            Some(ar),
+                            &[],
+                            Some(model),
+                            Some(&card.name),
+                        )
+                        .ok()
+                        .flatten()
+                    })
+                };
+                if let Some(p) = result {
                     paths.lock().unwrap()[idx] = Some(p);
                 }
             });
