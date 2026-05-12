@@ -92,7 +92,7 @@
     },
     {
       "name": "fm_voice_save",
-      "description": "Save an audio file as a named custom voice. ALWAYS call fm_voice_list first to check if the voice already exists — do NOT re-save existing voices. Only save new voices from user-provided audio clips (3-10 seconds of clear speech).",
+      "description": "Save an audio file as a named custom voice. Only save new voices from user-provided audio clips (3-10 seconds of clear speech). If a voice with the same name already exists this returns an error — report it and let the user pick a different name or confirm overwrite.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -113,7 +113,7 @@
     },
     {
       "name": "fm_voice_list",
-      "description": "List all available voices (preset + saved custom). Call this FIRST before any TTS or voice_save to check what voices already exist.",
+      "description": "List all available voices (preset + saved custom). Call this only when the user explicitly asks what voices are available, or when fm_tts / fm_voice_save returned an unknown-voice error. Do NOT call this proactively before fm_tts.",
       "input_schema": {
         "type": "object",
         "properties": {}

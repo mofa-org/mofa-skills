@@ -10,9 +10,9 @@ always: false
 
 ## How to use
 
-1. Call `fm_tts` directly with the full text. It runs in background and delivers the audio automatically.
+1. Call `fm_tts` directly with the full text and the voice the user named. It runs in background and delivers the audio automatically.
 2. Do NOT use spawn, shell scripts, or manual text splitting.
-3. Call `fm_voice_list` before TTS to check available voices (preset + custom).
+3. Do NOT pre-check the voice catalog. If the voice doesn't exist, `fm_tts` returns an error — report the missing-voice error to the user with the name they used; the user can then ask to list voices. Only call `fm_voice_list` when the user explicitly asks what voices are available.
 
 ## Voices
 
