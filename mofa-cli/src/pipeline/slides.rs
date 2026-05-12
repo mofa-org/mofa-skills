@@ -4,6 +4,7 @@ use crate::config::MofaConfig;
 use crate::dashscope::DashscopeClient;
 use crate::deepseek_ocr::DeepSeekOcrClient;
 use crate::gemini::{BatchImageRequest, GeminiClient};
+use crate::openai::OpenAIImageClient;
 use crate::layout::{
     extract_text_layout, extract_text_layout_deepseek, refine_text_layout, ANTI_LEAK_RULES,
     NO_TEXT_INSTRUCTION, SH, SW,
@@ -133,6 +134,7 @@ fn has_valid_cache(out_file: &Path, fingerprint: &str) -> bool {
 fn generate_image(
     gemini: &GeminiClient,
     dashscope: &Option<DashscopeClient>,
+    openai: &Option<OpenAIImageClient>,
     prompt: &str,
     out_file: &Path,
     image_size: Option<&str>,
@@ -145,6 +147,20 @@ fn generate_image(
     if has_valid_cache(out_file, &fingerprint) {
         eprintln!("Cached: {label}");
         return Some(out_file.to_path_buf());
+    }
+
+    if model.starts_with("gpt-image") {
+        if let Some(ref oa) = openai {
+            return oa
+                .gen_image(prompt, out_file, image_size, Some("16:9"), Some(model), Some(label))
+                .ok()
+                .flatten()
+                .inspect(|path| {
+                    let _ = write_cache_stamp(path, &fingerprint);
+                });
+        }
+        eprintln!("{label}: OpenAI client not configured for {model}");
+        return None;
     }
 
     if model.starts_with("qwen-image") {
@@ -261,6 +277,7 @@ fn run_slides_sync(
     gemini: &GeminiClient,
     ocr_client: &Option<DeepSeekOcrClient>,
     dashscope: &Option<DashscopeClient>,
+    openai: &Option<OpenAIImageClient>,
     total: usize,
     concurrency: usize,
     image_size: Option<&str>,
@@ -282,6 +299,7 @@ fn run_slides_sync(
         for (idx, slide) in slides.iter().enumerate() {
             let gemini = gemini;
             let dashscope = dashscope;
+            let openai = openai;
             let ocr_client = ocr_client;
             let ref_paths = Arc::clone(&ref_paths);
             let extracted_texts = Arc::clone(&extracted_texts);
@@ -321,6 +339,7 @@ fn run_slides_sync(
                         generate_image(
                             gemini,
                             dashscope,
+                            openai,
                             &full_prompt,
                             &ref_file,
                             ref_size,
@@ -397,6 +416,7 @@ fn run_slides_sync(
                     if let Some(p) = generate_image(
                         gemini,
                         dashscope,
+                        openai,
                         &full_prompt,
                         &out_path,
                         image_size,
@@ -492,6 +512,15 @@ pub fn run(
         .gemini_key()
         .ok_or_else(|| eyre::eyre!("Gemini API key required"))?;
     let gemini = GeminiClient::new(gemini_key);
+
+    // Build OpenAI client for gpt-image models.
+    let openai = match cfg.openai_key() {
+        Some(key) => {
+            eprintln!("OpenAI enabled (gpt-image models)");
+            Some(OpenAIImageClient::new(key))
+        }
+        None => None,
+    };
 
     // Build OCR client for grounded text extraction (precise bounding boxes).
     // When available: OCR+VQA mode. When absent: VQA-only mode.
@@ -632,6 +661,7 @@ pub fn run(
                         &gemini,
                         &ocr_client,
                         &dashscope,
+                        &openai,
                         total,
                         concurrency,
                         image_size,
@@ -816,6 +846,7 @@ pub fn run(
         for (idx, slide) in slides.iter().enumerate() {
             let gemini = &gemini;
             let dashscope = &dashscope;
+            let openai = &openai;
             let ocr_client = &ocr_client;
             let ref_paths = Arc::clone(&ref_paths);
             let extracted_texts = Arc::clone(&extracted_texts);
@@ -866,6 +897,7 @@ pub fn run(
                         generate_image(
                             gemini,
                             dashscope,
+                            openai,
                             &full_prompt,
                             &ref_file,
                             ref_size,
@@ -989,6 +1021,7 @@ pub fn run(
                     if let Some(p) = generate_image(
                         gemini,
                         dashscope,
+                        openai,
                         &full_prompt,
                         &out_path,
                         image_size,

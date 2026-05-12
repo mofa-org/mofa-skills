@@ -6,6 +6,7 @@ mod deepseek_ocr;
 mod gemini;
 mod image_util;
 mod layout;
+mod openai;
 mod pipeline;
 mod pptx;
 mod protocol_v2;
