@@ -2,6 +2,7 @@
   "name": "mofa-youtube",
   "version": "0.1.0",
   "timeout_secs": 1800,
+  "sha256": "fff57bb0f420dcb62070d33614f4e4e1337439b57825560ff294ca925f5e9cb2",
   "tools": [
     {
       "name": "mofa_youtube",

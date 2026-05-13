@@ -13,6 +13,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+#[cfg(unix)]
 use std::time::Duration;
 
 use serde_json::json;

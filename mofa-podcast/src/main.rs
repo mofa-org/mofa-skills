@@ -541,6 +541,7 @@ fn append_trailing_silence_to_wav(bytes: &[u8], duration_ms: u32) -> Vec<u8> {
     pcm_to_wav_with_format(&pcm, wav.sample_rate, wav.channels, wav.bits_per_sample)
 }
 
+#[cfg(test)]
 fn audio_duration_ms(bytes: &[u8], sample_rate: u32) -> u32 {
     if let Ok(wav) = parse_wav_metadata(bytes) {
         let bytes_per_frame =
@@ -556,28 +557,6 @@ fn audio_duration_ms(bytes: &[u8], sample_rate: u32) -> u32 {
     ((bytes.len() / 2) as u32)
         .saturating_mul(1000)
         .saturating_div(sample_rate)
-}
-
-fn has_meaningful_tts_audio(bytes: &[u8]) -> bool {
-    if audio_duration_ms(bytes, 24_000) < 150 {
-        return false;
-    }
-
-    let pcm = parse_wav_metadata(bytes)
-        .map(|wav| wav.data)
-        .unwrap_or(bytes);
-
-    let mut non_silent_samples = 0usize;
-    for chunk in pcm.chunks_exact(2) {
-        let sample = i16::from_le_bytes([chunk[0], chunk[1]]);
-        if sample.unsigned_abs() >= 16 {
-            non_silent_samples += 1;
-            if non_silent_samples >= 32 {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 /// Resolve ffmpeg binary path — checks PATH first, then common install locations.
@@ -887,6 +866,7 @@ fn normalize_script_line(line: &str) -> NormalizedScriptLine {
     if text.starts_with('[') {
         if let Some(close) = text.find(']') {
             let (header, rest) = text.split_at(close + 1);
+            #[allow(clippy::collapsible_str_replace)]
             let normalized_header = header
                 .replace('—', " - ")
                 .replace('–', " - ")
@@ -1257,9 +1237,11 @@ fn generate_tts_segment(
         }
     };
 
-    if !has_meaningful_tts_audio(&wav_bytes) {
-        return Err("TTS returned empty or too-short audio".to_string());
-    }
+    // Silent/short-audio detection has moved to the octos harness validator
+    // `AudioNonSilent` (wired in `WorkspacePolicy::for_session()` for
+    // `podcast_generate`). The harness inspects the final assembled audio
+    // file after the spawn task completes, so per-segment fail-fast is no
+    // longer needed here.
 
     let padded_wav_bytes = append_trailing_silence_to_wav(&wav_bytes, SEGMENT_TAIL_PADDING_MS);
 
@@ -1446,16 +1428,13 @@ fn generate_podcast(
     }
 
     if !configuration_errors.is_empty() {
-        return Err(format!(
-            "{}",
-            attach_script_fix_context(
-                format!(
-                    "Invalid podcast voice configuration:\n{}",
-                    configuration_errors.join("\n")
-                ),
-                repaired_script_path.as_deref(),
-                &repair_messages,
-            )
+        return Err(attach_script_fix_context(
+            format!(
+                "Invalid podcast voice configuration:\n{}",
+                configuration_errors.join("\n")
+            ),
+            repaired_script_path.as_deref(),
+            &repair_messages,
         ));
     }
 
@@ -2367,12 +2346,6 @@ mod tests {
         for &b in &wav[44..] {
             assert_eq!(b, 0);
         }
-    }
-
-    #[test]
-    fn silence_is_not_meaningful_tts_audio() {
-        let wav = generate_silence_wav(500);
-        assert!(!has_meaningful_tts_audio(&wav));
     }
 
     #[test]
