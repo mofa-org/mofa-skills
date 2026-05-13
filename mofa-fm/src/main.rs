@@ -148,6 +148,16 @@ struct TtsInput {
 struct VoiceSaveInput {
     name: String,
     audio_path: String,
+    /// Reference transcript (text spoken in the audio). If omitted, mofa-fm
+    /// asks ominix-api to auto-transcribe via `/v1/audio/transcriptions`.
+    #[serde(default)]
+    transcript: Option<String>,
+    /// Training quality: "fast" | "standard" | "high". Default: standard.
+    #[serde(default)]
+    quality: Option<String>,
+    /// Language hint for both transcription and training. Default: "zh".
+    #[serde(default)]
+    language: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1021,6 +1031,216 @@ fn handle_tts(input_json: &str, cancel: &AtomicBool) {
     std::process::exit(0);
 }
 
+// ── Voice training (ominix-api integration) ──────────────────────────
+
+/// Maximum time we wait for ominix-api to finish training a voice (seconds).
+/// Quick-mode training on M-series typically finishes in 30-60s; we allow
+/// 120s headroom so a busy server (concurrent TTS) doesn't time out.
+const VOICE_TRAIN_TIMEOUT_SECS: u64 = 120;
+/// Polling interval for `GET /v1/voices/train/status` (milliseconds).
+const VOICE_TRAIN_POLL_INTERVAL_MS: u64 = 1000;
+
+/// Auto-transcribe `wav_bytes` via ominix-api's `/v1/audio/transcriptions`
+/// endpoint when the caller didn't supply a transcript. Used as a fallback
+/// so the user doesn't have to type out the reference sentence by hand.
+///
+/// Returns `Err` if the endpoint is unreachable, returns non-2xx, or returns
+/// an empty transcript — callers should surface the error rather than
+/// substitute a placeholder (an empty transcript silently breaks training).
+fn transcribe_reference_audio(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    wav_bytes: &[u8],
+    language: &str,
+) -> Result<String, String> {
+    use base64::Engine;
+    let audio_b64 = base64::engine::general_purpose::STANDARD.encode(wav_bytes);
+    // Map our zh/en codes to the form OminiX expects. Paraformer accepts
+    // either "zh"/"en" or full names; the simpler form is safer here.
+    let lang = match language {
+        "zh" | "chinese" => "chinese",
+        "en" | "english" => "english",
+        other => other,
+    };
+    let body = json!({
+        "file": audio_b64,
+        "language": lang,
+    });
+    let resp = client
+        .post(format!("{base_url}/v1/audio/transcriptions"))
+        // ASR can take a moment on a busy server (single-threaded MLX);
+        // 60s is generous for the 3-10s clips we accept.
+        .timeout(Duration::from_secs(60))
+        .json(&body)
+        .send()
+        .map_err(|e| format!("ASR request failed: {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().unwrap_or_default();
+        return Err(format!("ASR HTTP {status}: {}", truncate(&text, 200)));
+    }
+    let parsed: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("ASR response was not JSON: {e}"))?;
+    let text = parsed
+        .get("text")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    if text.is_empty() {
+        return Err(
+            "ASR returned an empty transcript. Provide a `transcript` field manually.".to_string(),
+        );
+    }
+    Ok(text)
+}
+
+/// POST to `/v1/voices/train`. Returns the task_id from the 200 response.
+fn start_voice_training(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    voice_name: &str,
+    wav_bytes: &[u8],
+    transcript: &str,
+    quality: &str,
+    language: &str,
+) -> Result<String, String> {
+    use base64::Engine;
+    let audio_b64 = base64::engine::general_purpose::STANDARD.encode(wav_bytes);
+    let body = json!({
+        "voice_name": voice_name,
+        "audio": audio_b64,
+        "transcript": transcript,
+        "quality": quality,
+        "language": language,
+        "denoise": false,
+    });
+    let resp = client
+        .post(format!("{base_url}/v1/voices/train"))
+        // The endpoint only enqueues, but base64 of a 10-second clip is
+        // ~480KB so we keep a generous upload window.
+        .timeout(Duration::from_secs(60))
+        .json(&body)
+        .send()
+        .map_err(|e| format!("voices/train request failed: {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().unwrap_or_default();
+        return Err(format!(
+            "voices/train HTTP {status}: {}",
+            truncate(&text, 300)
+        ));
+    }
+    let parsed: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("voices/train response was not JSON: {e}"))?;
+    let task_id = parsed
+        .get("task_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "voices/train response missing task_id".to_string())?;
+    Ok(task_id.to_string())
+}
+
+/// Outcome of polling `/v1/voices/train/status` until terminal.
+enum TrainingOutcome {
+    Completed,
+    Failed(String),
+    Cancelled,
+    TimedOut,
+}
+
+/// Poll `GET /v1/voices/train/status?task_id=...` every second until
+/// the task reaches a terminal stage or the SIGTERM flag is set or
+/// `VOICE_TRAIN_TIMEOUT_SECS` elapses.
+fn poll_training_status(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    task_id: &str,
+    cancel: &AtomicBool,
+) -> TrainingOutcome {
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(VOICE_TRAIN_TIMEOUT_SECS);
+    loop {
+        if cancel.load(Ordering::Acquire) {
+            return TrainingOutcome::Cancelled;
+        }
+        if start.elapsed() >= timeout {
+            return TrainingOutcome::TimedOut;
+        }
+        let url = format!("{base_url}/v1/voices/train/status?task_id={task_id}");
+        let resp = match client.get(&url).timeout(Duration::from_secs(10)).send() {
+            Ok(r) => r,
+            Err(e) => {
+                // Transient network blip — keep polling. We surface failure
+                // only via the terminal timeout or an explicit "failed" stage.
+                emit_v2_progress(
+                    "training",
+                    &format!("status poll error (will retry): {e}"),
+                    None,
+                );
+                std::thread::sleep(Duration::from_millis(VOICE_TRAIN_POLL_INTERVAL_MS));
+                continue;
+            }
+        };
+        if !resp.status().is_success() {
+            // The server may briefly return 404 right after the task is
+            // accepted (race between handler ack and registry insert).
+            // Keep polling until timeout rather than failing hard.
+            std::thread::sleep(Duration::from_millis(VOICE_TRAIN_POLL_INTERVAL_MS));
+            continue;
+        }
+        let body: serde_json::Value = match resp.json() {
+            Ok(v) => v,
+            Err(_) => {
+                std::thread::sleep(Duration::from_millis(VOICE_TRAIN_POLL_INTERVAL_MS));
+                continue;
+            }
+        };
+        let stage = body.get("status").and_then(|v| v.as_str()).unwrap_or("");
+        let progress = body.get("progress").and_then(|v| v.as_f64());
+        match stage {
+            "complete" => return TrainingOutcome::Completed,
+            "failed" => {
+                let err = body
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("training failed (no error message)")
+                    .to_string();
+                return TrainingOutcome::Failed(err);
+            }
+            _ => {
+                emit_v2_progress(
+                    "training",
+                    &format!("ominix-api training: {stage}"),
+                    progress,
+                );
+            }
+        }
+        std::thread::sleep(Duration::from_millis(VOICE_TRAIN_POLL_INTERVAL_MS));
+    }
+}
+
+/// Post-condition: verify `voice_name` shows up in `GET /v1/voices` after
+/// training claimed success. This is the contract the operator cares about
+/// — without it, fm_tts will fail with "voice not registered".
+fn assert_voice_registered(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    voice_name: &str,
+) -> Result<(), String> {
+    let registered = fetch_registered_voices(client, base_url)
+        .map_err(|e| format!("post-condition /v1/voices unreachable: {e}"))?;
+    if voice_in_registry(voice_name, &registered) {
+        Ok(())
+    } else {
+        Err(format!(
+            "ominix-api accepted train task but /v1/voices does not list '{voice_name}' — TTS will fail. \
+             Available on server: {}",
+            registered.join(", ")
+        ))
+    }
+}
+
 // ── fm_voice_save ────────────────────────────────────────────────────
 
 fn handle_voice_save(input_json: &str, cancel: &AtomicBool) {
@@ -1069,7 +1289,7 @@ fn handle_voice_save(input_json: &str, cancel: &AtomicBool) {
     emit_v2_progress(
         "synthesizing",
         "Normalizing reference audio to WAV",
-        Some(0.4),
+        Some(0.3),
     );
 
     // Normalize reference audio to a real WAV file so uploaded MP3/M4A/OGG
@@ -1079,10 +1299,136 @@ fn handle_voice_save(input_json: &str, cancel: &AtomicBool) {
     if let Err(e) = normalize_reference_audio_to_wav(src, &dest) {
         fail(&e);
     }
+    let wav_bytes = match std::fs::read(&dest) {
+        Ok(b) => b,
+        Err(e) => fail(&format!("Failed to read normalized WAV: {e}")),
+    };
 
-    emit_v2_progress("delivering", "Updating voice registry", Some(0.85));
+    // Resolve language / quality with safe defaults.
+    let language = input
+        .language
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("zh")
+        .to_string();
+    let quality = input
+        .quality
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("standard")
+        .to_string();
 
-    // Update registry
+    let client = http_client();
+    let base_url = ominix_base_url();
+
+    // Pre-flight: ominix-api must be running, otherwise training will silently
+    // never start and the user gets the same "voice not registered" failure
+    // we're trying to eliminate. Surface a clean error here instead.
+    check_cancel(cancel);
+    if let Err(e) = check_health(&client, &base_url) {
+        // Roll back the local WAV — keeping it would let fm_voice_list show
+        // a phantom entry that fm_tts can't actually synthesize.
+        let _ = std::fs::remove_file(&dest);
+        fail(&e);
+    }
+
+    // Resolve transcript. The training endpoint rejects empty transcripts
+    // (see OminiX-API src/handlers/training.rs `if request.transcript.is_empty()`),
+    // so we either pass the caller-supplied text or auto-transcribe via ASR.
+    let transcript = match input
+        .transcript
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(t) => t.to_string(),
+        None => {
+            emit_v2_progress(
+                "transcribing",
+                "Auto-transcribing reference audio via /v1/audio/transcriptions",
+                Some(0.35),
+            );
+            match transcribe_reference_audio(&client, &base_url, &wav_bytes, &language) {
+                Ok(t) => t,
+                Err(e) => {
+                    let _ = std::fs::remove_file(&dest);
+                    fail(&format!(
+                        "No transcript provided and ASR fallback failed: {e}. \
+                         Pass `transcript` explicitly with the text spoken in the audio."
+                    ));
+                }
+            }
+        }
+    };
+
+    // Kick off training. Failure here = no registry mutation, no phantom voice.
+    check_cancel(cancel);
+    emit_v2_progress(
+        "training",
+        "Submitting voice clone job to ominix-api",
+        Some(0.5),
+    );
+    let task_id = match start_voice_training(
+        &client,
+        &base_url,
+        &name,
+        &wav_bytes,
+        &transcript,
+        &quality,
+        &language,
+    ) {
+        Ok(id) => id,
+        Err(e) => {
+            let _ = std::fs::remove_file(&dest);
+            fail(&format!("ominix-api training failed to start: {e}"));
+        }
+    };
+    emit_v2_progress(
+        "training",
+        &format!("Training task {task_id} queued; polling status"),
+        Some(0.55),
+    );
+
+    // Block until terminal. Failure / timeout / cancel all roll back.
+    match poll_training_status(&client, &base_url, &task_id, cancel) {
+        TrainingOutcome::Completed => {}
+        TrainingOutcome::Failed(err) => {
+            let _ = std::fs::remove_file(&dest);
+            fail(&format!("ominix-api training failed: {err}"));
+        }
+        TrainingOutcome::Cancelled => {
+            let _ = std::fs::remove_file(&dest);
+            check_cancel(cancel); // exits 130 if flag set
+            fail("Training cancelled");
+        }
+        TrainingOutcome::TimedOut => {
+            let _ = std::fs::remove_file(&dest);
+            fail(&format!(
+                "ominix-api training did not finish within {VOICE_TRAIN_TIMEOUT_SECS}s for task {task_id}. \
+                 Check ominix-api logs or retry with quality=\"fast\"."
+            ));
+        }
+    }
+
+    // Post-condition: server must list the new voice in /v1/voices. This is
+    // the contract that prevents the original yangmi failure mode (training
+    // appears accepted but TTS later 404s on the voice name).
+    emit_v2_progress(
+        "delivering",
+        "Verifying /v1/voices contains the new voice",
+        Some(0.9),
+    );
+    if let Err(e) = assert_voice_registered(&client, &base_url, &name) {
+        let _ = std::fs::remove_file(&dest);
+        fail(&e);
+    }
+
+    emit_v2_progress("delivering", "Updating local voice registry", Some(0.95));
+
+    // Only NOW persist the local registry entry — the server has accepted
+    // and listed the voice, so fm_tts is guaranteed to find it.
     let mut reg = load_registry();
     reg.voices.insert(
         name.clone(),
@@ -1104,6 +1450,9 @@ fn handle_voice_save(input_json: &str, cancel: &AtomicBool) {
             "kind": "plugin:mofa_fm:voice_save",
             "voice": name,
             "filename": filename,
+            "task_id": task_id,
+            "transcript_source": if input.transcript.as_deref().map(str::trim).filter(|s| !s.is_empty()).is_some() { "caller" } else { "asr_fallback" },
+            "ominix_registered": true,
         },
     });
     println!("{out}");
@@ -1261,10 +1610,10 @@ fn status_for(name: &str, classes: Option<&[(String, VoiceStatus)]>) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_voice_entries, fetch_registered_voices, http_client, parse_registered_voices,
-        pcm_to_wav, resolve_tts_output_paths, try_convert_to_mp3, validate_pcm_payload,
-        validate_requested_voice, validate_wav_payload, voice_in_registry, VoiceStatus,
-        MIN_TTS_AUDIO_PAYLOAD_BYTES,
+        assert_voice_registered, classify_voice_entries, fetch_registered_voices, http_client,
+        parse_registered_voices, pcm_to_wav, resolve_tts_output_paths, transcribe_reference_audio,
+        try_convert_to_mp3, validate_pcm_payload, validate_requested_voice, validate_wav_payload,
+        voice_in_registry, VoiceSaveInput, VoiceStatus, MIN_TTS_AUDIO_PAYLOAD_BYTES,
     };
     use serde_json::json;
     use std::net::TcpListener;
@@ -1540,6 +1889,146 @@ mod tests {
         assert!(voice_in_registry("vivian", &registered));
         assert!(voice_in_registry("serena", &registered));
         assert!(!voice_in_registry("ryan", &registered));
+    }
+
+    // ── voice_save input schema (transcript / quality / language) ────────
+
+    #[test]
+    fn voice_save_input_accepts_optional_transcript_quality_language() {
+        let json = r#"{
+            "name": "yangmi",
+            "audio_path": "/tmp/ref.wav",
+            "transcript": "你好世界",
+            "quality": "fast",
+            "language": "zh"
+        }"#;
+        let parsed: VoiceSaveInput = serde_json::from_str(json).expect("parse");
+        assert_eq!(parsed.name, "yangmi");
+        assert_eq!(parsed.transcript.as_deref(), Some("你好世界"));
+        assert_eq!(parsed.quality.as_deref(), Some("fast"));
+        assert_eq!(parsed.language.as_deref(), Some("zh"));
+    }
+
+    #[test]
+    fn voice_save_input_backward_compatible_without_transcript() {
+        // Existing callers should still parse cleanly — the new fields are
+        // all `Option<String>` so the minimal payload is unchanged.
+        let json = r#"{"name": "yangmi", "audio_path": "/tmp/ref.wav"}"#;
+        let parsed: VoiceSaveInput = serde_json::from_str(json).expect("parse");
+        assert!(parsed.transcript.is_none());
+        assert!(parsed.quality.is_none());
+        assert!(parsed.language.is_none());
+    }
+
+    // ── post-condition (assert_voice_registered) ─────────────────────────
+
+    #[test]
+    fn assert_voice_registered_errors_when_voice_missing_from_server() {
+        // Spin up a tiny TCP listener that responds 200 with an empty voices
+        // list so we can test the post-condition without needing a real
+        // ominix-api process.
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            use std::io::Write;
+            if let Ok((mut stream, _)) = listener.accept() {
+                let body = r#"{"voices":[{"name":"vivian","aliases":[]}]}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        let client = http_client();
+        let url = format!("http://127.0.0.1:{port}");
+        let err = assert_voice_registered(&client, &url, "yangmi").unwrap_err();
+        assert!(err.contains("yangmi"));
+        assert!(err.contains("TTS will fail"));
+    }
+
+    #[test]
+    fn assert_voice_registered_succeeds_when_voice_present() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            use std::io::Write;
+            if let Ok((mut stream, _)) = listener.accept() {
+                let body = r#"{"voices":[{"name":"yangmi","aliases":[]}]}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        let client = http_client();
+        let url = format!("http://127.0.0.1:{port}");
+        assert!(assert_voice_registered(&client, &url, "yangmi").is_ok());
+    }
+
+    // ── ASR fallback (transcribe_reference_audio) ────────────────────────
+
+    #[test]
+    fn transcribe_reference_audio_errors_when_endpoint_unreachable() {
+        // Bind+drop pattern: closed port -> connection refused -> Err.
+        let port = {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+            let port = listener.local_addr().unwrap().port();
+            drop(listener);
+            port
+        };
+        let client = http_client();
+        let url = format!("http://127.0.0.1:{port}");
+        let err = transcribe_reference_audio(&client, &url, b"fake-wav", "zh").unwrap_err();
+        assert!(err.contains("ASR"));
+    }
+
+    #[test]
+    fn transcribe_reference_audio_returns_text_field() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            use std::io::{Read as _, Write};
+            if let Ok((mut stream, _)) = listener.accept() {
+                // Drain request so client doesn't get RST before reading body.
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let body = r#"{"text":"你好"}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        let client = http_client();
+        let url = format!("http://127.0.0.1:{port}");
+        let text = transcribe_reference_audio(&client, &url, b"fake-wav", "zh").expect("ok");
+        assert_eq!(text, "你好");
+    }
+
+    #[test]
+    fn transcribe_reference_audio_errors_on_empty_text() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            use std::io::{Read as _, Write};
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let body = r#"{"text":""}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        let client = http_client();
+        let url = format!("http://127.0.0.1:{port}");
+        let err = transcribe_reference_audio(&client, &url, b"fake-wav", "zh").unwrap_err();
+        assert!(err.contains("empty transcript"));
     }
 }
 
