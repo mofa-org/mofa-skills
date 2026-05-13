@@ -866,6 +866,7 @@ fn normalize_script_line(line: &str) -> NormalizedScriptLine {
     if text.starts_with('[') {
         if let Some(close) = text.find(']') {
             let (header, rest) = text.split_at(close + 1);
+            #[allow(clippy::collapsible_str_replace)]
             let normalized_header = header
                 .replace('—', " - ")
                 .replace('–', " - ")
@@ -1427,16 +1428,13 @@ fn generate_podcast(
     }
 
     if !configuration_errors.is_empty() {
-        return Err(format!(
-            "{}",
-            attach_script_fix_context(
-                format!(
-                    "Invalid podcast voice configuration:\n{}",
-                    configuration_errors.join("\n")
-                ),
-                repaired_script_path.as_deref(),
-                &repair_messages,
-            )
+        return Err(attach_script_fix_context(
+            format!(
+                "Invalid podcast voice configuration:\n{}",
+                configuration_errors.join("\n")
+            ),
+            repaired_script_path.as_deref(),
+            &repair_messages,
         ));
     }
 
