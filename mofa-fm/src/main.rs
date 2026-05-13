@@ -850,20 +850,26 @@ fn handle_tts(input_json: &str, cancel: &AtomicBool) {
         ));
     }
 
-    // Pre-validate against ominix-api's registered voice list. This catches
-    // cases where mofa-fm's catalog diverged from the server (e.g. mini2
-    // had yangmi locally but ominix-api's voices.json was empty, causing
-    // silent voice substitution). Graceful degradation: if /v1/voices is
+    // Pre-validate PRESET voices against ominix-api's /v1/voices list.
+    // Custom voices are LOCAL-ONLY for Qwen3-TTS (the reference WAV is
+    // supplied few-shot to /v1/audio/tts/clone at synthesis time — they
+    // never appear in /v1/voices), so the local-registry resolve above is
+    // the authoritative check. Graceful degradation: if /v1/voices is
     // unreachable, fall through — better to try than block on a transient
     // connectivity issue.
-    match fetch_registered_voices(&client, &base_url) {
-        Ok(registered) => {
-            if let Err(msg) = validate_requested_voice(&voice_name, &registered) {
-                fail(&msg);
+    let is_local_clone = resolve_custom_voice(&voice_name).is_some();
+    if !is_local_clone {
+        match fetch_registered_voices(&client, &base_url) {
+            Ok(registered) => {
+                if let Err(msg) = validate_requested_voice(&voice_name, &registered) {
+                    fail(&msg);
+                }
             }
-        }
-        Err(e) => {
-            eprintln!("Warning: could not verify voice against /v1/voices ({e}); proceeding.");
+            Err(e) => {
+                eprintln!(
+                    "Warning: could not verify voice against /v1/voices ({e}); proceeding."
+                );
+            }
         }
     }
 
