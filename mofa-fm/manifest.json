@@ -92,7 +92,7 @@
     },
     {
       "name": "fm_voice_save",
-      "description": "Save an audio file as a named custom voice. ALWAYS call fm_voice_list first to check if the voice already exists — do NOT re-save existing voices. Only save new voices from user-provided audio clips (3-10 seconds of clear speech).",
+      "description": "Save an audio file as a named custom voice by training a voice clone on ominix-api. ALWAYS call fm_voice_list first to check if the voice already exists — do NOT re-save existing voices. Only save new voices from user-provided audio clips (3-10 seconds of clear speech). The skill registers the voice with ominix-api end-to-end: it POSTs /v1/voices/train, polls /v1/voices/train/status to completion, then verifies the voice appears in /v1/voices before declaring success. Training takes 30-120s depending on quality preset.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -103,11 +103,46 @@
           "audio_path": {
             "type": "string",
             "description": "Absolute path to the audio file to use as voice reference. Supports WAV directly and auto-converts MP3/M4A/OGG/FLAC to WAV before saving."
+          },
+          "transcript": {
+            "type": "string",
+            "description": "Optional: the exact text spoken in the reference audio. If omitted, mofa-fm calls ominix-api's /v1/audio/transcriptions to auto-transcribe via Paraformer ASR. Provide explicitly for best clone quality (caller has ground truth; ASR may mis-hear)."
+          },
+          "quality": {
+            "type": "string",
+            "description": "Training quality preset: 'fast' (~30s, lower fidelity), 'standard' (default, ~60s), 'high' (~120s, best fidelity)."
+          },
+          "language": {
+            "type": "string",
+            "description": "Language code for both ASR fallback and training. Default: 'zh'. Supported: 'zh', 'en'."
           }
         },
         "required": [
           "name",
           "audio_path"
+        ]
+      },
+      "workspace_contract": {
+        "comment": "Documentation-only block describing the end-to-end registration contract this tool enforces internally. The runtime's authoritative workspace policy is not involved here — the post-condition is enforced INSIDE the skill before declaring success, mirroring the mofa-podcast/audio_non_silent pattern.",
+        "post_checks": [
+          {
+            "kind": "http_probe",
+            "method": "GET",
+            "url": "${OMINIX_API_URL}/v1/voices",
+            "expect": "response body 'voices' array contains an entry whose 'name' (or 'aliases') matches input.name (case-insensitive)",
+            "enforced_by": "skill",
+            "implemented_in": "src/main.rs::assert_voice_registered (called from handle_voice_save after poll_training_status returns Completed)",
+            "note": "Prevents the original yangmi failure mode: training appears accepted but the voice never lands in /v1/voices, so a later fm_tts call fails with 'voice not registered'. On post-condition failure, the skill removes the local WAV and aborts with a structured error before touching the local registry."
+          },
+          {
+            "kind": "ominix_training_completed",
+            "endpoint": "GET ${OMINIX_API_URL}/v1/voices/train/status?task_id=<task_id>",
+            "terminal_stages": ["complete", "failed"],
+            "timeout_secs": 120,
+            "enforced_by": "skill",
+            "implemented_in": "src/main.rs::poll_training_status",
+            "note": "Polls every 1s until the training task reaches a terminal stage. Cancel signal (SIGTERM) is honoured at every poll. On 'failed', 'timeout', or 'cancelled' the local WAV is removed and no registry entry is created."
+          }
         ]
       }
     },
