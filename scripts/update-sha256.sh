@@ -32,6 +32,12 @@ else
     exit 1
 fi
 
+# jq is required for the in-place JSON edit.
+if ! command -v jq >/dev/null 2>&1; then
+    echo "error: jq not found in PATH (install via 'brew install jq' or apt)" >&2
+    exit 1
+fi
+
 # Compute sha256 of a file, printing only the hex digest.
 sha256_of() {
     $SHA_CMD "$1" | awk '{print $1}'
