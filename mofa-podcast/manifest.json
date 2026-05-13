@@ -41,11 +41,5 @@
         }
       }
     }
-  ],
-  "binaries": {
-    "darwin-aarch64": {
-      "url": "",
-      "sha256": ""
-    }
-  }
+  ]
 }
