@@ -92,7 +92,7 @@
     },
     {
       "name": "fm_voice_save",
-      "description": "Save an audio file as a named custom voice. ALWAYS call fm_voice_list first to check if the voice already exists — do NOT re-save existing voices. Only save new voices from user-provided audio clips (3-10 seconds of clear speech).",
+      "description": "Save an audio file as a named custom voice in the local registry. ALWAYS call fm_voice_list first to check if the voice already exists — do NOT re-save existing voices. Only save new voices from user-provided audio clips (3-10 seconds of clear speech). This is a LOCAL operation: the skill normalizes the audio to WAV and records the name->path mapping. There is NO ominix-api round-trip at save time. Qwen3-TTS voice cloning is few-shot inline at synthesis time — fm_tts later sends the reference WAV as multipart to POST /v1/audio/tts/clone.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -108,6 +108,26 @@
         "required": [
           "name",
           "audio_path"
+        ]
+      },
+      "workspace_contract": {
+        "comment": "Documentation-only block describing the local-registry contract fm_voice_save enforces. Qwen3-TTS voice cloning has NO server-side registration step: the reference WAV is supplied few-shot to POST /v1/audio/tts/clone at synthesis time (see fm_tts). The skill's job here is therefore purely local — normalize to WAV, write to disk, update voices.json. Do NOT add an OminixVoiceExists / GET /v1/voices probe: custom clones do not appear in /v1/voices (that endpoint lists GPT-SoVITS-trained voices, a different engine on a different model).",
+        "post_checks": [
+          {
+            "kind": "file_exists",
+            "path": "${OCTOS_VOICE_DIR:-${OCTOS_DATA_DIR}/voice_profiles}/${input.name}.wav",
+            "enforced_by": "skill",
+            "implemented_in": "src/main.rs::handle_voice_save (post-save existence check on `dest`)",
+            "note": "The normalized WAV must be readable on disk because fm_tts streams it as the multipart `reference_audio` field of POST /v1/audio/tts/clone. If the file is missing, synthesis will fail with a generic Clone error."
+          },
+          {
+            "kind": "registry_contains",
+            "registry": "${OCTOS_DATA_DIR}/voices.json",
+            "key": "${input.name}",
+            "enforced_by": "skill",
+            "implemented_in": "src/main.rs::handle_voice_save (reload after save_registry and assert key present)",
+            "note": "fm_tts resolves the WAV path via VoiceRegistry::voices[name].file; the name must therefore be in the local registry. This is the authoritative lookup — no server-side cross-check is performed (and would be wrong: see the comment above)."
+          }
         ]
       }
     },

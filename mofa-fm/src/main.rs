@@ -1093,11 +1093,30 @@ fn handle_voice_save(input_json: &str, cancel: &AtomicBool) {
     );
     save_registry(&reg);
 
+    // Post-condition: the reference WAV must exist on disk and the local
+    // registry must contain `name`. Qwen3-TTS voice cloning is few-shot
+    // inline at synthesis time (POST /v1/audio/tts/clone with the WAV as
+    // multipart), so there is NO server-side voice registration to verify.
+    // The skill's contract is therefore purely local: a WAV the clone
+    // endpoint can read + a name fm_tts can look up.
+    if !dest.exists() {
+        fail(&format!(
+            "Post-condition failed: normalized WAV missing at {}",
+            dest.display()
+        ));
+    }
+    let reload = load_registry();
+    if !reload.voices.contains_key(&name) {
+        fail(&format!(
+            "Post-condition failed: registry missing entry for '{name}' after save"
+        ));
+    }
+
     emit_v2_progress("complete", &format!("Voice '{name}' saved"), Some(1.0));
 
     let out = json!({
         "output": format!(
-            "Voice '{name}' saved successfully. Use it with fm_tts by setting voice to '{name}'."
+            "Voice '{name}' saved locally. Use it with fm_tts by setting voice to '{name}'; the reference WAV is supplied few-shot to /v1/audio/tts/clone at synthesis time (no server-side registration step)."
         ),
         "success": true,
         "summary": {
