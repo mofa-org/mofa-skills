@@ -1,7 +1,22 @@
 #!/bin/bash
-# Deploy all mofa skills to a Mac Mini profile/sub-account.
+# DEPRECATED: Deploy all mofa skills to a Mac Mini profile/sub-account.
 # Usage: ./scripts/deploy-mini.sh [mini1|mini3] [profile]
+#
+# This script is deprecated. Use the fleet-install script in the octos repo
+# instead — it routes through `octos skills install` so every install is
+# sha256-verified and resolves the correct per-profile target directory:
+#
+#     /Users/yuechen/home/octos/scripts/fleet-install-skills.sh --host <hosts>
+#
+# To run this legacy script anyway (raw scp, no sha256 verification, single
+# hard-coded profile path), set OCTOS_DEPRECATED_SCP=1.
 set -euo pipefail
+
+echo >&2 "ERROR: deploy-mini.sh is deprecated. Use:"
+echo >&2 "  /Users/yuechen/home/octos/scripts/fleet-install-skills.sh --host <hosts>"
+echo >&2 "Falling back to legacy behavior. Suppress this warning by setting OCTOS_DEPRECATED_SCP=1."
+[ -n "${OCTOS_DEPRECATED_SCP:-}" ] || exit 1
+
 
 MINI="${1:-mini1}"
 PROFILE="${2:-dspfac}"
