@@ -95,10 +95,15 @@ fn install_sigterm_handler() -> Arc<AtomicBool> {
                         "SIGTERM received, shutting down mofa-podcast",
                         None,
                     );
-                    // Brief pause so any in-flight write settles. The
-                    // generation loop also calls `check_cancel` between
-                    // segments to unwind cleanly via the SegmentDir Drop
-                    // impl, which removes the per-run scratch directory.
+                    // Brief pause so any in-flight write settles, then
+                    // exit. NOTE: `std::process::exit` skips Rust
+                    // destructors, so `SegmentDirCleanup::drop()` does
+                    // not run — partial `segments/` state may persist
+                    // until the next run wipes it on entry. Fixing
+                    // this properly would require unwinding the
+                    // generation loop via Result instead of exiting
+                    // from the signal handler; out of scope for the
+                    // harness-followup change.
                     std::thread::sleep(Duration::from_millis(100));
                     std::process::exit(130);
                 }
@@ -112,9 +117,12 @@ fn install_sigterm_handler() -> Arc<AtomicBool> {
 }
 
 /// If the cancel flag fires while we're between checkpoints, exit
-/// cleanly. The signal-handler thread also calls exit(130) on its own,
-/// but doing it here means the caller's stack unwinds, which runs the
-/// `SegmentDirCleanup` Drop impl (clearing the scratch directory).
+/// cleanly. The signal-handler thread also calls exit(130) on its
+/// own. Both paths use `std::process::exit`, which bypasses Rust
+/// destructors, so `SegmentDirCleanup::drop()` will NOT run and any
+/// partial `segments/` state on disk survives until the next run's
+/// start-of-run wipe in `generate_podcast`. This matches long-standing
+/// behaviour from before the harness-followup change.
 fn check_cancel(cancel: &AtomicBool) {
     if cancel.load(Ordering::Acquire) {
         emit_v2_progress("cleanup", "Cancelled at checkpoint, exiting", None);
@@ -1262,18 +1270,78 @@ struct GenerateInput {
     output_dir: Option<String>,
 }
 
+// ── Segment directory lifecycle ────────────────────────────────────
+//
+// `<output_dir>/segments/` holds the per-segment WAVs we synthesize
+// before concatenating into the final MP3. Historically the Drop impl
+// always removed this directory on scope exit — but the octos harness
+// needs the per-segment files to remain on disk so a future
+// `PerFileNonSilent` validator can confirm no individual dialogue
+// segment is silent (a TTS dropout on one segment would otherwise be
+// padded to silence and slip past the whole-file `AudioNonSilent`
+// check, leaving the user with a mid-conversation dropout).
+//
+// New contract:
+//   * Success path (Ok(_) return from `generate_podcast`): the guard's
+//     `mark_success()` is called before the final return, so Drop is a
+//     no-op and the per-segment WAVs survive for harness validation.
+//   * Err return / unwinding panic: the flag stays `false` and Drop
+//     wipes the directory — matches the prior behaviour so failed
+//     runs don't leak partial state.
+//   * SIGTERM cancel: both the signal-handler thread and
+//     `check_cancel()` call `std::process::exit(130)`, which bypasses
+//     RAII Drop. Partial segment state can therefore survive a
+//     SIGTERM (long-standing pre-existing behaviour); the next
+//     successful run wipes the directory on entry (see the
+//     `seg_dir.exists()` clear in `generate_podcast`).
+//
+// To avoid stale segments from a prior successful run masking a TTS
+// failure in a subsequent run (the assembly loop trusts
+// `seg_path.exists()`), `generate_podcast` clears
+// `<output_dir>/segments/` at the start of every invocation. The
+// guard then governs end-of-run behaviour.
+//
+// Filename shape used by the future `PerFileNonSilent` validator
+// (glob `**/segments/seg_*.wav`):
+//   * `seg_{NNN}_{voice}.wav`        — dialogue (validate audio non-silent)
+//   * `pause_after_{NNN}.wav`        — intentional inter-speaker pause (excluded)
+//   * `pause_line_{NNN}.wav`         — [PAUSE: Ns] cue (excluded)
+//   * `bgm_placeholder_line_{NNN}.wav` — BGM placeholder silence (excluded)
+//
+// Operators: this no longer auto-cleans `<output_dir>/segments/` on
+// success. Periodic disk GC of stale output dirs is now an operator
+// concern (`mofa-podcast` itself doesn't reap older runs, but does
+// wipe the segments directory at the start of each new run).
+//
+// See: harness audit doc + the per-segment silence diagnostic PR for
+// the failure-mode this contract restores validation against.
 struct SegmentDirCleanup {
     path: PathBuf,
+    success: AtomicBool,
 }
 
 impl SegmentDirCleanup {
     fn new(path: PathBuf) -> Self {
-        Self { path }
+        Self {
+            path,
+            success: AtomicBool::new(false),
+        }
+    }
+
+    /// Flip the guard into "preserve on drop" mode. Call this just
+    /// before returning Ok from `generate_podcast` so the per-segment
+    /// WAVs stay on disk for harness validation.
+    fn mark_success(&self) {
+        self.success.store(true, Ordering::Release);
     }
 }
 
 impl Drop for SegmentDirCleanup {
     fn drop(&mut self) {
+        if self.success.load(Ordering::Acquire) {
+            // Success path: leave segments on disk for harness validation.
+            return;
+        }
         let _ = std::fs::remove_dir_all(&self.path);
     }
 }
@@ -1343,16 +1411,40 @@ fn generate_podcast(
         return Err("Either 'script' or 'script_path' must be provided".to_string());
     };
 
-    // Setup output directory
+    // Setup output directory.
+    //
+    // We clear any prior `segments/` contents at the start of every run.
+    // The success path now preserves per-segment WAVs for harness
+    // `PerFileNonSilent` validation, so a stale `seg_NNN_voice.wav` from
+    // a previous successful run would otherwise be picked up by the
+    // assembly loop's `seg_path.exists()` check (line ~1640) when a
+    // subsequent run's TTS fails for that slot — silently substituting
+    // stale audio and letting the assembled-count consistency check
+    // pass with the wrong content. Wiping on entry guarantees the
+    // segments directory only ever holds files from the current run.
     let output_dir = resolve_output_dir(input.output_dir);
     let seg_dir = output_dir.join("segments");
+    if seg_dir.exists() {
+        std::fs::remove_dir_all(&seg_dir).map_err(|e| {
+            format!(
+                "Failed to clear stale segment directory '{}': {e}",
+                seg_dir.display()
+            )
+        })?;
+    }
     std::fs::create_dir_all(&seg_dir).map_err(|e| {
         format!(
             "Failed to create segment directory '{}': {e}",
             seg_dir.display()
         )
     })?;
-    let _seg_dir_cleanup = SegmentDirCleanup::new(seg_dir.clone());
+    // Cleanup-on-failure guard: persists per-segment WAVs on Ok return
+    // (we call `mark_success()` below) and wipes them on the Err return
+    // path. Note: `std::process::exit` from the SIGTERM handler skips
+    // Drop, so a SIGTERM cancel may leave partial state on disk; this
+    // is the long-standing pre-existing behaviour (see the comment
+    // block above `SegmentDirCleanup`).
+    let seg_dir_cleanup = SegmentDirCleanup::new(seg_dir.clone());
 
     // Validate and normalize script markdown before generation.
     let prepared_script = validate_and_fix_script_markdown(&script)?;
@@ -1706,6 +1798,12 @@ fn generate_podcast(
         ),
         Some(1.0),
     );
+
+    // Preserve per-segment WAVs on disk so the octos harness can run
+    // `PerFileNonSilent` validation against them. The guard's Drop is a
+    // no-op once this flag is set; failure paths above leave it false
+    // and the scratch directory is cleared.
+    seg_dir_cleanup.mark_success();
 
     Ok(json!({
         "output": output_msg,
@@ -2213,19 +2311,21 @@ mod tests {
 
     #[test]
     fn generate_podcast_accepts_multiline_dialogue_before_voice_validation() {
+        let output_dir = unique_test_dir("multiline-dialogue");
         let input = GenerateInput {
             script: Some("[Host - not_a_real_voice, calm]\nhello".to_string()),
             script_path: None,
-            output_dir: Some(format!("/tmp/mofa-podcast-test-{}", timestamp())),
+            output_dir: Some(output_dir.to_string_lossy().to_string()),
         };
         let cancel = AtomicBool::new(false);
         let err = generate_podcast(input, &cancel).unwrap_err();
         assert!(err.contains("voice"), "{err}");
+        let _ = std::fs::remove_dir_all(&output_dir);
     }
 
     #[test]
     fn generate_podcast_persists_normalized_script_before_voice_validation() {
-        let output_dir = PathBuf::from(format!("/tmp/mofa-podcast-test-{}", timestamp()));
+        let output_dir = unique_test_dir("persists-normalized");
         let input = GenerateInput {
             script: Some("**【Host — not_a_real_voice， calm】**\nhello".to_string()),
             script_path: None,
@@ -2423,6 +2523,169 @@ mod tests {
         assert_ne!(a, b);
     }
 
+    // ── SegmentDirCleanup contract tests ───────────────────────────
+    //
+    // Contract:
+    //   * Default state (no `mark_success`): Drop wipes the directory.
+    //   * After `mark_success`: Drop leaves files in place so the
+    //     octos harness can run `PerFileNonSilent` against
+    //     `**/segments/seg_*.wav`.
+
+    fn unique_test_dir(label: &str) -> PathBuf {
+        use std::sync::atomic::AtomicU64;
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let pid = std::process::id();
+        PathBuf::from(format!(
+            "/tmp/mofa-podcast-test-{label}-{ts}-{pid}-{n}",
+            ts = timestamp()
+        ))
+    }
+
+    #[test]
+    fn segment_dir_cleanup_wipes_on_drop_by_default() {
+        let dir = unique_test_dir("cleanup-default");
+        let segments = dir.join("segments");
+        std::fs::create_dir_all(&segments).unwrap();
+        std::fs::write(segments.join("seg_001_vivian.wav"), b"fake-wav").unwrap();
+        assert!(segments.join("seg_001_vivian.wav").exists());
+
+        {
+            let _guard = SegmentDirCleanup::new(segments.clone());
+            // No mark_success() → guard treats this as a failure scope.
+        }
+        assert!(
+            !segments.exists(),
+            "segments directory should be wiped on failure-path drop"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn segment_dir_cleanup_preserves_after_mark_success() {
+        let dir = unique_test_dir("cleanup-success");
+        let segments = dir.join("segments");
+        std::fs::create_dir_all(&segments).unwrap();
+        let seg_file = segments.join("seg_001_vivian.wav");
+        std::fs::write(&seg_file, b"fake-wav").unwrap();
+
+        {
+            let guard = SegmentDirCleanup::new(segments.clone());
+            guard.mark_success();
+        }
+
+        assert!(
+            segments.exists(),
+            "segments directory should survive after mark_success"
+        );
+        assert!(
+            seg_file.exists(),
+            "seg_001_vivian.wav should survive for PerFileNonSilent validation"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn segment_dir_cleanup_mark_success_is_idempotent() {
+        // Calling `mark_success()` multiple times on the same guard
+        // must remain a no-op safe operation: callers shouldn't have
+        // to track whether they've already marked the guard.
+        let dir = unique_test_dir("cleanup-idempotent");
+        let segments = dir.join("segments");
+        std::fs::create_dir_all(&segments).unwrap();
+        std::fs::write(segments.join("seg_001_eric.wav"), b"fake-wav").unwrap();
+
+        {
+            let guard = SegmentDirCleanup::new(segments.clone());
+            guard.mark_success();
+            guard.mark_success();
+            guard.mark_success();
+        }
+
+        assert!(
+            segments.exists(),
+            "repeated mark_success calls should still preserve segments"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn segment_dir_cleanup_handles_missing_directory_gracefully() {
+        // A failure path that never actually created the segments dir
+        // must not panic on drop.
+        let dir = unique_test_dir("cleanup-missing");
+        let segments = dir.join("segments");
+        // Do NOT create `segments`.
+
+        {
+            let _guard = SegmentDirCleanup::new(segments.clone());
+        }
+
+        assert!(!segments.exists());
+    }
+
+    // Integration-style test: simulates the *post-assembly* state of
+    // `generate_podcast`'s happy path — `<output_dir>/segments/` is
+    // populated with realistic file names, the guard is marked success,
+    // and after the guard goes out of scope the per-segment WAVs must
+    // still be on disk for the future `PerFileNonSilent` validator.
+    //
+    // We can't run real TTS in CI (`ominix-api` is Apple Silicon only
+    // and requires network), so this validates the *cleanup contract*
+    // independently of the synthesis pipeline. Any change to
+    // `SegmentDirCleanup` that breaks this test would also break the
+    // octos harness's per-segment validation.
+    #[test]
+    fn happy_path_leaves_segment_wavs_on_disk_after_return() {
+        let output_dir = unique_test_dir("happy-path");
+        let seg_dir = output_dir.join("segments");
+        std::fs::create_dir_all(&seg_dir).unwrap();
+
+        // Populate the directory shape `generate_podcast` produces on
+        // success: dialogue WAVs + non-dialogue placeholders.
+        let dialogue_files = [
+            "seg_001_vivian.wav",
+            "seg_002_ryan.wav",
+            "seg_003_serena.wav",
+        ];
+        let placeholder_files = [
+            "pause_after_001.wav",
+            "pause_line_004.wav",
+            "bgm_placeholder_line_000.wav",
+        ];
+        for name in dialogue_files.iter().chain(placeholder_files.iter()) {
+            std::fs::write(seg_dir.join(name), b"fake-wav").unwrap();
+        }
+
+        // Scope the guard exactly like `generate_podcast` does.
+        {
+            let guard = SegmentDirCleanup::new(seg_dir.clone());
+            // ... synthesis + assembly happens here ...
+            guard.mark_success();
+        }
+
+        // All files — including the dialogue WAVs the future validator
+        // will glob via `**/segments/seg_*.wav` — must remain.
+        assert!(seg_dir.exists(), "segments dir should survive");
+        for name in dialogue_files.iter() {
+            assert!(
+                seg_dir.join(name).exists(),
+                "{name} should remain on disk for PerFileNonSilent"
+            );
+        }
+        for name in placeholder_files.iter() {
+            assert!(
+                seg_dir.join(name).exists(),
+                "{name} should remain on disk (validator's glob will filter it out)"
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&output_dir);
+    }
+
     #[test]
     fn concat_fallback_rejects_wrong_wav_format() {
         let wav = pcm_to_wav(&vec![0u8; 200], 22050);
@@ -2432,26 +2695,65 @@ mod tests {
 
     #[test]
     fn generate_podcast_rejects_unknown_voice_before_network_work() {
+        let output_dir = unique_test_dir("rejects-unknown-voice");
         let input = GenerateInput {
             script: Some("[Host - not_a_real_voice, calm] hello".to_string()),
             script_path: None,
-            output_dir: Some(format!("/tmp/mofa-podcast-test-{}", timestamp())),
+            output_dir: Some(output_dir.to_string_lossy().to_string()),
         };
         let cancel = AtomicBool::new(false);
         let err = generate_podcast(input, &cancel).unwrap_err();
         assert!(err.contains("unknown voice"));
+        let _ = std::fs::remove_dir_all(&output_dir);
+    }
+
+    #[test]
+    fn generate_podcast_wipes_segments_directory_on_error_return() {
+        // End-to-end Err-path Drop test: `generate_podcast` returns Err
+        // before `mark_success()`, so the guard's Drop must wipe the
+        // segments directory. Plant a stale file first to confirm the
+        // start-of-run wipe also removes prior-run residue.
+        let output_dir = unique_test_dir("err-wipes-segments");
+        let seg_dir = output_dir.join("segments");
+        std::fs::create_dir_all(&seg_dir).unwrap();
+        let stale_file = seg_dir.join("seg_001_stale.wav");
+        std::fs::write(&stale_file, b"prior-run-residue").unwrap();
+        assert!(stale_file.exists());
+
+        let input = GenerateInput {
+            script: Some("[Host - not_a_real_voice, calm] hello".to_string()),
+            script_path: None,
+            output_dir: Some(output_dir.to_string_lossy().to_string()),
+        };
+        let cancel = AtomicBool::new(false);
+        let _err = generate_podcast(input, &cancel).unwrap_err();
+
+        // Either the start-of-run wipe or the failure-path Drop must
+        // have removed the stale file. Both paths are exercised here.
+        assert!(
+            !stale_file.exists(),
+            "stale prior-run segment must not survive an Err return"
+        );
+        assert!(
+            !seg_dir.exists(),
+            "segments directory must be wiped on Err return"
+        );
+
+        let _ = std::fs::remove_dir_all(&output_dir);
     }
 
     #[test]
     fn generate_podcast_rejects_malformed_script_lines() {
+        let output_dir = unique_test_dir("rejects-malformed");
         let input = GenerateInput {
             script: Some("[Host - vivian, calm] hello\nnot valid".to_string()),
             script_path: None,
-            output_dir: Some(format!("/tmp/mofa-podcast-test-{}", timestamp())),
+            output_dir: Some(output_dir.to_string_lossy().to_string()),
         };
         let cancel = AtomicBool::new(false);
         let err = generate_podcast(input, &cancel).unwrap_err();
         assert!(err.contains("malformed non-metadata lines"));
+        let _ = std::fs::remove_dir_all(&output_dir);
     }
 
     // ── Voice grouping / ordering tests ────────────────────────────

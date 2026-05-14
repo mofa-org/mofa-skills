@@ -1,6 +1,6 @@
 [package]
 name = "mofa-podcast"
-version = "0.4.5"
+version = "0.4.6"
 edition = "2021"
 description = "Multi-speaker podcast generation with TTS voice synthesis and audio assembly"
 authors = ["hagency"]
