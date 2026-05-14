@@ -226,11 +226,15 @@ if $OMINIX_AVAILABLE; then
         skip "5.4 Audio duration check" "ffprobe not available"
     fi
 
-    # 5.5 Segments cleanup
-    if [[ ! -d "$TMPDIR/output1/segments" ]]; then
-        pass "5.5 Segment files cleaned up after concat"
+    # 5.5 Segments preserved on success (harness PerFileNonSilent contract).
+    # The success path now keeps `<output_dir>/segments/seg_*.wav` on disk so
+    # the octos harness can validate each dialogue segment is non-silent.
+    if [[ -d "$TMPDIR/output1/segments" ]] && \
+       compgen -G "$TMPDIR/output1/segments/seg_*.wav" >/dev/null; then
+        pass "5.5 Per-segment WAVs preserved after success (for PerFileNonSilent)"
     else
-        fail "5.5 Segment files cleaned up after concat" "segments dir still exists"
+        fail "5.5 Per-segment WAVs preserved after success (for PerFileNonSilent)" \
+            "segments/ missing or has no seg_*.wav files"
     fi
 
     # 5.6 Stderr shows correct phase ordering
