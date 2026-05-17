@@ -4,6 +4,7 @@ use crate::config::MofaConfig;
 use crate::dashscope::DashscopeClient;
 use crate::gemini::{BatchImageRequest, GeminiClient};
 use crate::image_util;
+use crate::openai::OpenAIImageClient;
 use crate::style::Style;
 use eyre::Result;
 use serde::Deserialize;
@@ -20,7 +21,8 @@ pub struct SectionInput {
 
 #[allow(clippy::too_many_arguments)]
 fn gen_sections_sync(
-    gemini: &GeminiClient,
+    gemini: &Option<GeminiClient>,
+    openai: &Option<OpenAIImageClient>,
     out_dir: &Path,
     sections: &[SectionInput],
     style: &Style,
@@ -60,15 +62,35 @@ fn gen_sections_sync(
                 let padded = format!("{:02}", idx + 1);
                 let out_path = out_dir.join(format!("section-{padded}.png"));
 
-                if let Ok(Some(p)) = gemini.gen_image(
-                    &full_prompt,
-                    &out_path,
-                    image_size,
-                    Some(ar),
-                    &[],
-                    Some(model),
-                    Some(&format!("Section {}", idx + 1)),
-                ) {
+                let result = if model.starts_with("gpt-image") {
+                    openai.as_ref().and_then(|oa| {
+                        oa.gen_image(
+                            &full_prompt,
+                            &out_path,
+                            image_size,
+                            Some(ar),
+                            Some(model),
+                            Some(&format!("Section {}", idx + 1)),
+                        )
+                        .ok()
+                        .flatten()
+                    })
+                } else {
+                    gemini.as_ref().and_then(|gem| {
+                        gem.gen_image(
+                            &full_prompt,
+                            &out_path,
+                            image_size,
+                            Some(ar),
+                            &[],
+                            Some(model),
+                            Some(&format!("Section {}", idx + 1)),
+                        )
+                        .ok()
+                        .flatten()
+                    })
+                };
+                if let Some(p) = result {
                     paths.lock().unwrap()[idx] = Some(p);
                 }
             });
@@ -95,20 +117,25 @@ pub fn run(
     gen_model: Option<&str>,
     batch: bool,
 ) -> Result<Option<PathBuf>> {
-    let gemini_key = cfg
-        .gemini_key()
-        .ok_or_else(|| eyre::eyre!("Gemini API key required"))?;
-    let gemini = GeminiClient::new(gemini_key);
+    let gemini = cfg.gemini_key().map(GeminiClient::new);
+    let openai = cfg.openai_key().map(OpenAIImageClient::new);
+
+    let model = gen_model.unwrap_or(cfg.gen_model());
+    if model.starts_with("gpt-image") && openai.is_none() {
+        eyre::bail!("OpenAI API key required for gpt-image models");
+    }
+    if !model.starts_with("gpt-image") && gemini.is_none() {
+        eyre::bail!("Gemini API key required");
+    }
 
     std::fs::create_dir_all(out_dir)?;
     let total = sections.len();
-    let model = gen_model.unwrap_or(cfg.gen_model());
     let ar = aspect_ratio.unwrap_or("16:9");
 
     eprintln!("Generating {total}-section infographic...");
 
     // Phase 1: Generate sections
-    let mut section_paths_vec: Vec<Option<PathBuf>> = if batch {
+    let mut section_paths_vec: Vec<Option<PathBuf>> = if batch && !model.starts_with("gpt-image") {
         let requests: Vec<BatchImageRequest> = sections
             .iter()
             .enumerate()
@@ -139,12 +166,13 @@ pub fn run(
                 }
             })
             .collect();
-        match gemini.batch_gen_images(requests) {
+        match gemini.as_ref().unwrap().batch_gen_images(requests) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("Batch failed ({e}), falling back to parallel sync...");
                 gen_sections_sync(
                     &gemini,
+                    &openai,
                     out_dir,
                     sections,
                     style,
@@ -159,6 +187,7 @@ pub fn run(
     } else {
         gen_sections_sync(
             &gemini,
+            &openai,
             out_dir,
             sections,
             style,

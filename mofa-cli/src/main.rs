@@ -99,6 +99,9 @@ enum Commands {
         /// API mode: rt (realtime, default) or batch (50% cheaper, async)
         #[arg(long, value_enum, default_value = "rt")]
         api: ApiMode,
+        /// Image generation model (e.g. gpt-image-2)
+        #[arg(long)]
+        gen_model: Option<String>,
         /// Input JSON file (or stdin)
         #[arg(long, short)]
         input: Option<PathBuf>,
@@ -132,6 +135,9 @@ enum Commands {
         /// API mode: rt (realtime, default) or batch (50% cheaper, async)
         #[arg(long, value_enum, default_value = "rt")]
         api: ApiMode,
+        /// Image generation model (e.g. gpt-image-2)
+        #[arg(long)]
+        gen_model: Option<String>,
         /// Input JSON file (or stdin)
         #[arg(long, short)]
         input: Option<PathBuf>,
@@ -165,6 +171,9 @@ enum Commands {
         /// API mode: rt (realtime, default) or batch (50% cheaper, async)
         #[arg(long, value_enum, default_value = "rt")]
         api: ApiMode,
+        /// Image generation model (e.g. gpt-image-2)
+        #[arg(long)]
+        gen_model: Option<String>,
         /// Input JSON file (or stdin)
         #[arg(long, short)]
         input: Option<PathBuf>,
@@ -224,6 +233,9 @@ enum Commands {
         /// API mode: rt (realtime, default) or batch (50% cheaper, async)
         #[arg(long, value_enum, default_value = "rt")]
         api: ApiMode,
+        /// Image generation model (e.g. gpt-image-2)
+        #[arg(long)]
+        gen_model: Option<String>,
         /// Input JSON file (or stdin)
         #[arg(long, short)]
         input: Option<PathBuf>,
@@ -277,8 +289,19 @@ fn find_styles_dir(mofa_root: &std::path::Path, skill_name: &str) -> PathBuf {
     mofa_root.join("mofa").join("styles")
 }
 
+struct PluginOutput {
+    text: String,
+    files: Vec<String>,
+}
+
+impl From<String> for PluginOutput {
+    fn from(text: String) -> Self {
+        Self { text, files: vec![] }
+    }
+}
+
 /// Plugin protocol mode: called as `./main <tool_name>` with JSON on stdin.
-/// Returns `{"output": "...", "success": true/false, "summary": ...}` on stdout.
+/// Returns `{"output": "...", "success": true/false, "files_to_send": [...]}` on stdout.
 fn run_plugin(tool_name: &str, cancel: &std::sync::atomic::AtomicBool) -> Result<()> {
     use crate::protocol_v2::{check_cancel, emit_v2_progress};
 
@@ -322,14 +345,14 @@ fn run_plugin(tool_name: &str, cancel: &std::sync::atomic::AtomicBool) -> Result
     // emit a structured summary return `serde_json::Value::Null` —
     // the host treats missing summary as "no structured info, use the
     // existing output text".
-    let result: Result<(String, serde_json::Value)> = match tool_name {
-        "mofa_slides" => plugin_slides(&args, &mofa_root, &cfg, cancel),
-        "mofa_cards" => plugin_cards(&args, &mofa_root, &cfg).map(|s| (s, serde_json::Value::Null)),
-        "mofa_comic" => plugin_comic(&args, &mofa_root, &cfg).map(|s| (s, serde_json::Value::Null)),
+    let result: Result<(PluginOutput, serde_json::Value)> = match tool_name {
+        "mofa_slides" => plugin_slides(&args, &mofa_root, &cfg, cancel).map(|(s, v)| (s.into(), v)),
+        "mofa_cards" => plugin_cards(&args, &mofa_root, &cfg).map(|o| (o, serde_json::Value::Null)),
+        "mofa_comic" => plugin_comic(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null)),
         "mofa_infographic" => {
-            plugin_infographic(&args, &mofa_root, &cfg).map(|s| (s, serde_json::Value::Null))
+            plugin_infographic(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null))
         }
-        "mofa_video" => plugin_video(&args, &mofa_root, &cfg).map(|s| (s, serde_json::Value::Null)),
+        "mofa_video" => plugin_video(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null)),
         _ => Err(eyre::eyre!("unknown tool: {tool_name}")),
     };
 
@@ -337,11 +360,14 @@ fn run_plugin(tool_name: &str, cancel: &std::sync::atomic::AtomicBool) -> Result
         Ok((output, summary)) => {
             emit_v2_progress("complete", &format!("{tool_name} complete"), Some(1.0));
             let mut payload = serde_json::json!({
-                "output": output,
+                "output": output.text,
                 "success": true,
             });
             if !summary.is_null() {
                 payload["summary"] = summary;
+            }
+            if !output.files.is_empty() {
+                payload["files_to_send"] = serde_json::json!(output.files);
             }
             println!("{payload}");
         }
@@ -586,7 +612,7 @@ fn plugin_cards(
     args: &serde_json::Value,
     mofa_root: &std::path::Path,
     cfg: &config::MofaConfig,
-) -> Result<String> {
+) -> Result<PluginOutput> {
     let style_name = args
         .get("style")
         .and_then(|v| v.as_str())
@@ -615,7 +641,8 @@ fn plugin_cards(
     std::fs::create_dir_all(&card_dir).ok();
 
     let batch = args.get("api").and_then(|v| v.as_str()).unwrap_or("rt") == "batch";
-    pipeline::cards::run(
+    let gen_model = args.get("gen_model").and_then(|v| v.as_str());
+    let results = pipeline::cards::run(
         &card_dir,
         &cards,
         &loaded_style,
@@ -623,15 +650,28 @@ fn plugin_cards(
         concurrency,
         aspect,
         image_size,
-        None,
+        gen_model,
         batch,
     )?;
 
-    Ok(format!(
-        "Generated {} card(s) in {}",
-        cards.len(),
-        card_dir.display()
-    ))
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let files: Vec<String> = results
+        .iter()
+        .filter_map(|p| {
+            p.as_ref().map(|p| {
+                if p.is_absolute() {
+                    p.display().to_string()
+                } else {
+                    cwd.join(p).display().to_string()
+                }
+            })
+        })
+        .collect();
+
+    Ok(PluginOutput {
+        text: format!("Generated {} card(s) in {}", cards.len(), card_dir.display()),
+        files,
+    })
 }
 
 fn plugin_comic(
@@ -835,6 +875,7 @@ fn plugin_video(
     std::fs::create_dir_all(&card_dir).ok();
 
     let batch = args.get("api").and_then(|v| v.as_str()).unwrap_or("rt") == "batch";
+    let gen_model = args.get("gen_model").and_then(|v| v.as_str());
     pipeline::video::run(
         &card_dir,
         &cards,
@@ -851,6 +892,7 @@ fn plugin_video(
         music_volume,
         music_fade_in,
         batch,
+        gen_model,
     )?;
 
     Ok(format!(
@@ -931,6 +973,7 @@ fn main() -> Result<()> {
             concurrency,
             image_size,
             api,
+            gen_model,
             input,
         } => {
             let styles_dir = find_styles_dir(&mofa_root, "cards");
@@ -948,7 +991,7 @@ fn main() -> Result<()> {
                 concurrency,
                 aspect.as_deref(),
                 image_size.as_deref(),
-                None,
+                gen_model.as_deref(),
                 matches!(api, ApiMode::Batch),
             )?;
         }
@@ -962,6 +1005,7 @@ fn main() -> Result<()> {
             refine,
             gutter,
             api,
+            gen_model,
             input,
         } => {
             let styles_dir = find_styles_dir(&mofa_root, "comic");
@@ -988,7 +1032,7 @@ fn main() -> Result<()> {
                 image_size.as_deref(),
                 refine,
                 gutter,
-                None,
+                gen_model.as_deref(),
                 matches!(api, ApiMode::Batch),
             )?;
         }
@@ -1002,6 +1046,7 @@ fn main() -> Result<()> {
             refine,
             gutter,
             api,
+            gen_model,
             input,
         } => {
             let styles_dir = find_styles_dir(&mofa_root, "infographic");
@@ -1028,7 +1073,7 @@ fn main() -> Result<()> {
                 aspect.as_deref(),
                 refine,
                 gutter,
-                None,
+                gen_model.as_deref(),
                 matches!(api, ApiMode::Batch),
             )?;
         }
@@ -1046,6 +1091,7 @@ fn main() -> Result<()> {
             music_volume,
             music_fade_in,
             api,
+            gen_model,
             input,
         } => {
             let styles_dir = find_styles_dir(&mofa_root, "video");
@@ -1078,6 +1124,7 @@ fn main() -> Result<()> {
                 music_volume,
                 music_fade_in,
                 matches!(api, ApiMode::Batch),
+                gen_model.as_deref(),
             )?;
         }
         Commands::PptxUnpack { input, output_dir } => {
