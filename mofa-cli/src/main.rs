@@ -353,6 +353,9 @@ fn run_plugin(tool_name: &str, cancel: &std::sync::atomic::AtomicBool) -> Result
             plugin_infographic(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null))
         }
         "mofa_video" => plugin_video(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null)),
+        "mofa_list_styles" => {
+            plugin_list_styles(&args, &mofa_root).map(|(s, v)| (s.into(), v))
+        }
         _ => Err(eyre::eyre!("unknown tool: {tool_name}")),
     };
 
@@ -525,7 +528,10 @@ fn plugin_slides(
     }
 
     // Check workspace styles first (agent-created), then built-in styles.
-    // If neither exists, fall back to nb-pro so generation never fails on style.
+    // If neither exists, bail loudly so the caller can pick a real style —
+    // a silent swap to a different theme hides deployment drift (e.g. an
+    // older skill snapshot missing a style) and produces output that looks
+    // like the LLM picked the wrong color scheme on purpose.
     let style_filename = format!("{style_name}.toml");
     let builtin_dir = find_styles_dir(mofa_root, "slides");
     let cwd_style = std::env::current_dir()
@@ -538,8 +544,17 @@ fn plugin_slides(
     } else if builtin_style.exists() {
         builtin_style
     } else {
-        eprintln!("style '{}' not found, falling back to nb-pro", style_name);
-        builtin_dir.join("nb-pro.toml")
+        let available = style::list_style_names(&builtin_dir);
+        let list = if available.is_empty() {
+            format!("(none found in {})", builtin_dir.display())
+        } else {
+            available.join(", ")
+        };
+        eyre::bail!(
+            "style '{style_name}' not found under {}. Available: {list}. \
+             Call the `mofa_list_styles` tool to inspect variants and descriptions.",
+            builtin_dir.display()
+        );
     };
     let loaded_style = style::load_style(&style_file)?;
 
@@ -900,6 +915,112 @@ fn plugin_video(
         cards.len(),
         card_dir.display()
     ))
+}
+
+/// Scan the styles dir for a given skill and return the live catalog.
+/// Reads each `*.toml`, extracts `[meta]` + variant names, and returns a JSON object.
+/// The LLM should call this BEFORE picking a style so it never asks for one
+/// that isn't on the deployed copy.
+fn plugin_list_styles(
+    args: &serde_json::Value,
+    mofa_root: &std::path::Path,
+) -> Result<(String, serde_json::Value)> {
+    let skill = args
+        .get("skill")
+        .and_then(|v| v.as_str())
+        .unwrap_or("slides");
+    let styles_dir = find_styles_dir(mofa_root, skill);
+    let names = style::list_style_names(&styles_dir);
+
+    let mut styles_json: Vec<serde_json::Value> = Vec::with_capacity(names.len());
+    for name in &names {
+        let path = styles_dir.join(format!("{name}.toml"));
+        let entry = match style::load_style(&path) {
+            Ok(s) => {
+                let meta = s
+                    .meta
+                    .clone()
+                    .unwrap_or(toml::Value::Table(Default::default()));
+                // Surface common meta fields as first-class JSON keys; everything else
+                // (tags, category, etc.) ends up under `meta`.
+                let display_name = meta
+                    .get("display_name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(name)
+                    .to_string();
+                let description = meta
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let category = meta
+                    .get("category")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+                let tags: Vec<String> = meta
+                    .get("tags")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                serde_json::json!({
+                    "name": name,
+                    "display_name": display_name,
+                    "description": description,
+                    "category": category,
+                    "tags": tags,
+                    "variants": s.variant_names(),
+                    "default_variant": s.default_variant_name(),
+                })
+            }
+            Err(e) => serde_json::json!({
+                "name": name,
+                "error": format!("{e:#}"),
+            }),
+        };
+        styles_json.push(entry);
+    }
+
+    let summary = serde_json::json!({
+        "skill": skill,
+        "styles_dir": styles_dir.to_string_lossy(),
+        "count": names.len(),
+        "styles": styles_json,
+    });
+
+    let human = if names.is_empty() {
+        format!(
+            "No styles found under {} (skill={skill})",
+            styles_dir.display()
+        )
+    } else {
+        let mut lines = vec![format!(
+            "{} {skill} styles available (from {}):",
+            names.len(),
+            styles_dir.display()
+        )];
+        for s in &summary["styles"].as_array().cloned().unwrap_or_default() {
+            let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+            let display = s.get("display_name").and_then(|v| v.as_str()).unwrap_or("");
+            let variants = s
+                .get("variants")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_default();
+            lines.push(format!("  • {name} — {display} [variants: {variants}]"));
+        }
+        lines.join("\n")
+    };
+
+    Ok((human, summary))
 }
 
 fn main() -> Result<()> {

@@ -23,6 +23,37 @@ impl Style {
             .map(|s| s.as_str())
             .unwrap_or("")
     }
+
+    /// Variant names declared in this style (excludes the synthetic `default` key).
+    pub fn variant_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.variants.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
+    /// Name of the default variant (the one used when no `style` is specified).
+    pub fn default_variant_name(&self) -> &str {
+        &self.default_variant
+    }
+}
+
+/// Scan a styles directory and return the list of style names (file stems of `*.toml`)
+/// without parsing the prompt bodies. Returns an empty vec if the dir is missing.
+pub fn list_style_names(dir: &Path) -> Vec<String> {
+    let mut names = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return names;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().map(|e| e == "toml").unwrap_or(false) {
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                names.push(stem.to_string());
+            }
+        }
+    }
+    names.sort();
+    names
 }
 
 /// Load a single TOML style file.
