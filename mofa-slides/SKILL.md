@@ -13,14 +13,23 @@ CLI: `mofa slides` | Styles: `mofa-slides/styles/*.toml` | Config: `mofa/config.
 
 ## Output Paths
 
-**IMPORTANT**: Always use relative paths under `skill-output/` with a unique per-request subdirectory:
+**Always use relative paths. Never include `skill-output/` as a prefix yourself** — the Octos host automatically rebinds plugin output paths to `<workspace>/skill-output/`, so prefixing `skill-output/` will double-prefix and break delivery.
+
+**Inside an Octos slides workspace** (the normal case via `/new slides <name>`):
 
 ```
-skill-output/mofa-slides-<YYYYMMDD-HHMMSS>/slides.pptx
-skill-output/mofa-slides-<YYYYMMDD-HHMMSS>/slide-dir/
+"out": "slides/<slug>/output/deck.pptx"
+"slide_dir": "slides/<slug>/output/imgs"
 ```
 
-Example: `"out": "skill-output/mofa-slides-20260308-143022/deck.pptx"`, `"slide_dir": "skill-output/mofa-slides-20260308-143022/imgs"`
+The deck ends up at `<workspace>/skill-output/slides/<slug>/output/deck.pptx`, the workspace contract picks it up via the plugin's `files_to_send`, and the deck is auto-delivered.
+
+**Standalone (outside Octos)** — use a unique per-request subdirectory under the current working directory:
+
+```
+"out": "deck-<YYYYMMDD-HHMMSS>/deck.pptx"
+"slide_dir": "deck-<YYYYMMDD-HHMMSS>/imgs"
+```
 
 **Never use absolute paths like `/tmp/slides.pptx`** — use relative paths instead.
 
