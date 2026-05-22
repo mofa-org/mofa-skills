@@ -1,6 +1,6 @@
 {
   "name": "mofa-slides",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "timeout_secs": 1800,
   "binaries": {
     "darwin-aarch64": {
@@ -8,6 +8,20 @@
     }
   },
   "tools": [
+    {
+      "name": "mofa_list_styles",
+      "description": "List the slide styles available on this deployment. Call this BEFORE picking a style so you never request one that isn't installed (avoids silent fallback). Returns name, description, variants, tags per style.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "skill": {
+            "type": "string",
+            "description": "Skill catalog to list. Defaults to 'slides'.",
+            "default": "slides"
+          }
+        }
+      }
+    },
     {
       "name": "mofa_slides",
       "spawn_only": true,
@@ -32,7 +46,7 @@
                 },
                 "auto_layout": {
                   "type": "boolean",
-                  "description": "Enable editable text mode for this slide"
+                  "description": "AVOID unless user explicitly asks for VQA / OCR-based extraction or PDF-to-PPTX conversion. This pipeline (generate-with-text → VQA-extract → text-removal) is slow (+10-20s/slide), costs extra (Qwen-Edit calls), and the resulting text positions usually need heavy human cleanup. For editable slides, prefer the `texts` array (Mode 2) — author the text boxes yourself."
                 },
                 "source_image": {
                   "type": "string",
@@ -50,7 +64,7 @@
           },
           "style": {
             "type": "string",
-            "description": "Style template name (default: nb-pro)",
+            "description": "Style template name. Call `mofa_list_styles` to see what's installed before picking — the binary will error out (not silently substitute) if the name doesn't exist. Default: nb-pro.",
             "default": "nb-pro"
           },
           "out": {
@@ -63,7 +77,7 @@
           },
           "auto_layout": {
             "type": "boolean",
-            "description": "Enable editable text mode for ALL slides"
+            "description": "AVOID by default. Forces VQA + text-removal on every slide — slow, expensive, and the extracted layout usually needs manual cleanup. Only enable when the user explicitly asks for OCR/VQA extraction or PDF-to-PPTX. For editable output, prefer authoring the `texts` array per slide instead."
           },
           "concurrency": {
             "type": "integer",

@@ -88,8 +88,7 @@ impl OpenAIImageClient {
             {
                 Ok(resp) => {
                     if let Ok(data) = resp.json::<Value>() {
-                        if let Some(b64) =
-                            data.pointer("/data/0/b64_json").and_then(|v| v.as_str())
+                        if let Some(b64) = data.pointer("/data/0/b64_json").and_then(|v| v.as_str())
                         {
                             if let Ok(bytes) = base64::Engine::decode(
                                 &base64::engine::general_purpose::STANDARD,

@@ -1,6 +1,6 @@
 ---
 name: mofa-slides
-version: 0.4.2
+version: 0.5.0
 description: "AI-generated visual presentations with full-bleed Gemini images. Triggers: mofa, mofa ppt, mofa deck, slides, 幻灯片, generative slides, build a mofa ppt, 用mofa做PPT, AI deck, 做个PPT, make slides."
 always: true
 requires_bins: mofa
@@ -13,14 +13,23 @@ CLI: `mofa slides` | Styles: `mofa-slides/styles/*.toml` | Config: `mofa/config.
 
 ## Output Paths
 
-**IMPORTANT**: Always use relative paths under `skill-output/` with a unique per-request subdirectory:
+**Always use relative paths. Never include `skill-output/` as a prefix yourself** — the Octos host automatically rebinds plugin output paths to `<workspace>/skill-output/`, so prefixing `skill-output/` will double-prefix and break delivery.
+
+**Inside an Octos slides workspace** (the normal case via `/new slides <name>`):
 
 ```
-skill-output/mofa-slides-<YYYYMMDD-HHMMSS>/slides.pptx
-skill-output/mofa-slides-<YYYYMMDD-HHMMSS>/slide-dir/
+"out": "slides/<slug>/output/deck.pptx"
+"slide_dir": "slides/<slug>/output/imgs"
 ```
 
-Example: `"out": "skill-output/mofa-slides-20260308-143022/deck.pptx"`, `"slide_dir": "skill-output/mofa-slides-20260308-143022/imgs"`
+The deck ends up at `<workspace>/skill-output/slides/<slug>/output/deck.pptx`, the workspace contract picks it up via the plugin's `files_to_send`, and the deck is auto-delivered.
+
+**Standalone (outside Octos)** — use a unique per-request subdirectory under the current working directory:
+
+```
+"out": "deck-<YYYYMMDD-HHMMSS>/deck.pptx"
+"slide_dir": "deck-<YYYYMMDD-HHMMSS>/imgs"
+```
 
 **Never use absolute paths like `/tmp/slides.pptx`** — use relative paths instead.
 
@@ -50,11 +59,11 @@ If task state says completed but workspace contract is not ready, report the dec
 Before generating, gather preferences interactively. On Telegram, use inline keyboard buttons when possible:
 
 1. **Topic/content** — Ask what the presentation is about
-2. **Style** — Recommend based on content, show options:
-   - Business/corporate → `agentic-enterprise-red` or `nb-pro`
+2. **Style** — Call `mofa_list_styles` to see exactly what's installed on this deployment, then recommend based on content. **Do not memorize the catalog from this doc** — the deployed copy may have more, fewer, or differently-named styles than what's listed here, and the binary will now error out (not silently fall back to a different theme) if you pick a name that isn't installed. General buckets:
+   - Business/corporate → `nb-pro`, `agentic-enterprise-red`
    - Academic/research → `what-is-life`
-   - Creative/artsy → `fengzikai` or `lingnan`
-   - Tech/startup → `nb-br` or `dark-community`
+   - Creative/artsy → `fengzikai`, `lingnan`
+   - Tech/startup → `nb-br`, `dark-community`
    - Product launch → `vlinka-dji`
    - Conference/summit → `gobi`
 3. **Number of slides** — Suggest 5-8 for a pitch, 10-15 for a full deck
@@ -72,38 +81,63 @@ message(content="Choose a style:", metadata={"inline_keyboard": [
 ```
 User's button press arrives as `[callback] style:nb-pro`.
 
-## Four Modes
+## Three Modes (+ one specialized)
 
-### Mode 1: Image-only (default)
+### Decision tree
+
+```
+Does the user need editable text in PowerPoint?
+├── No  → Mode 1 (image-only): text baked into the AI image
+├── Yes → Mode 2 (clean bg + manual texts): YOU author the text boxes  ← DEFAULT for "editable"
+└── PDF/image to PPTX? → Mode 4 (source_image + auto_layout)
+```
+
+**Mode 3 (auto_layout VQA) is a fallback for specialized cases — do not use it as a shortcut for "editable PPT".** See "When NOT to use auto_layout" below.
+
+### Mode 1: Image-only (default for "make a deck")
 Text baked into AI image. Beautiful, but not editable in PowerPoint.
-- User says: "做PPT", "make slides"
+- User says: "做PPT", "make slides", "design a deck for me"
 - `prompt` describes everything (background + text content)
 - No `texts` field, no `auto_layout`
 
-### Mode 2: Clean background + manual text overlay
-AI generates a text-free background, you specify text boxes manually with precise positioning. Like cc-ppt's approach — best for pixel-perfect control.
-- User says: "可编辑PPT with my text", "editable with exact layout"
-- Provide `texts` array per slide (NO `auto_layout`)
+### Mode 2: Clean background + manual text overlay (DEFAULT for "editable")
+AI generates a text-free background; you specify text boxes manually with precise positioning. Pixel-perfect, fast, predictable, and the output is fully editable in PowerPoint.
+- **User says: "可编辑PPT", "editable slides", "editable deck", "editable with my text"** — this is the right mode for almost all "editable" requests.
+- Provide `texts` array per slide. NEVER set `auto_layout` here.
 - AI prompt gets `NO_TEXT_INSTRUCTION` appended → generates clean background only
 - Your `texts` are overlaid as native PowerPoint text boxes
 - Supports `runs` for rich text (mixed fonts/colors/sizes in one box), `fill` for card backgrounds, `margin`, `lineSpacing`
-- No VQA, no text removal — fast and predictable
+- No VQA, no text-removal pass — fast (single image call per slide), deterministic, cheap, and the layout is exactly what you wrote.
+- See the detailed example in the "Examples" section below.
 
-### Mode 3: Auto-layout (VQA)
-Fully automated editable slides. AI generates with text, VQA extracts layout, text is removed, native text boxes overlaid.
-- User says: "可编辑PPT", "editable slides", "auto layout"
-- Add `auto_layout: true` per slide or `--auto-layout` flag for all
-- Requires `GEMINI_API_KEY`. `DASHSCOPE_API_KEY` recommended for best quality text removal.
-- Pipeline: Generate → VQA extract → Remove text → Assemble
+### Mode 3: Auto-layout VQA — AVOID by default
+Generate-with-text, then have VQA read the image back to extract every text box's position/font/color, then run a text-removal pass to clean the background, then overlay the extracted text. Sounds magical; in practice the output usually needs heavy human cleanup before it's usable.
+
+**When NOT to use auto_layout** (i.e. almost always):
+- The user asked for "可编辑PPT" / "editable slides" — that's Mode 2's job, not this.
+- You can author the text yourself (titles, bullets, metrics) — Mode 2 is faster, cheaper, and pixel-accurate.
+- The deck will be reviewed/edited by a human before shipping — Mode 2 produces cleaner starting points.
+
+**When auto_layout is appropriate** (the rare cases):
+- The user **explicitly** says "auto layout", "VQA extract", "let the model decide where text goes", or asks to reconstruct an existing pixel-perfect design.
+- Mode 4 (PDF-to-PPTX) — the only way to convert a `source_image` into editable text.
+
+**Costs of enabling auto_layout** (state these to the user when they ask for it):
+- +10-20s per slide for VQA extraction + text-removal pass
+- Extra Qwen-Edit calls (requires `DASHSCOPE_API_KEY` for decent output)
+- Extracted text positions, font sizes, and colors are approximate — expect to redo layout by hand
+- The text-removal pass can leave artifacts in illustrations/charts
+
+Set per-slide via `auto_layout: true`, or for the whole deck via `--auto-layout` / top-level `auto_layout: true`.
 
 ### Mode 4: PDF-to-PPTX
-Convert existing slide images to editable PowerPoint. Provide `source_image` + `auto_layout: true`.
+Convert existing slide images to editable PowerPoint. This is the one case where auto_layout earns its cost — there's no other way to recover text from an existing image. Provide `source_image` + `auto_layout: true`.
 - Pipeline: Copy image → VQA extract → Remove text → Assemble (skips generation)
 
 ### Anti-leak rules
 All image generation prompts automatically include anti-leak rules that prevent Gemini from rendering formatting hints (font sizes, hex colors, CSS notation) as literal text. This applies to all modes.
 
-### Editable mode pipeline (Modes 3 & 4, 4 phases):
+### Auto-layout pipeline (Modes 3 & 4, 4 phases):
 1. **Generate/Import**: Gemini generates full slide image with text (or use `source_image`)
 2. **Extract**: VQA reads the image → extracts every text element (content, position, font size, color, weight, alignment). OCR+VQA hybrid when DeepSeek OCR is available.
 3. **Remove text**: `qwen-image-edit-max` removes all text, preserving illustrations/wireframes/charts. Falls back to Gemini image editing if DASHSCOPE_API_KEY is not set.
@@ -145,29 +179,36 @@ The style prompt should describe: background, colors, illustration style, decora
 | Retro 80s、复古80年代 | `Dark purple/navy gradient. Neon grid perspective, chrome text style, sunset gradients (pink→orange→purple). Synthwave aesthetic, VHS scanlines. Nostalgic, bold.` |
 | 日式和风、Japanese wa | `Soft cream (#F5F0E1) with indigo (#2C3E6B) accents. Cherry blossoms, wave patterns (seigaiha), torii gates. Delicate, balanced, wabi-sabi minimalism.` |
 
-## Built-in Styles (17)
+## Built-in Styles
 
-| User says | `--style` | Variants |
-|-----------|-----------|----------|
-| 红色企业、华为风、商务红 | `agentic-enterprise-red` | normal, cover, data |
-| 紫色企业、咨询风、McKinsey | `agentic-enterprise` | normal, warm, cover, data |
-| 极简、北欧、MUJI、IKEA | `nordic-minimal` | normal, data, cover |
-| 专业、商务、正式 | `nb-pro` | normal |
-| 科幻、赛博朋克、Blade Runner | `nb-br` | normal |
-| 暗色、社区、开源社区 | `dark-community` | normal |
-| 学术、科研、论文、study notes | `what-is-life` | cover, physics_dark, biology_light, overview |
-| 开源、可爱、卡通鲸鱼 | `opensource` | normal, data, cover |
-| 暖色、琥珀、电影感 | `cc-research` | normal |
-| 产品发布、DJI、大疆 | `vlinka-dji` | cover, hero, feature, scene, data |
-| 多品牌对比、公司对比 | `multi-brand` | amazon_light, amazon_dark, google, microsoft, tesla_light, tesla_dark, nvidia_light, nvidia_dark, spacex, overview, cover |
-| 简笔画、小人、greeting | `relevant` | front, greeting, scene, festive |
-| 策略、咨询、薰衣草 | `tectonic` | normal, data, cover |
-| 开源企业、红黑 | `openclaw-red` | normal, cover, data |
-| 丰子恺、水墨、童趣、宣纸 | `fengzikai` | normal, cover, data |
-| 岭南、国画、水彩、花鸟 | `lingnan` | normal, cover, data, warm |
-| 会议、峰会、conference、GOBI | `gobi` | cover, normal, data, warm |
-| "有哪些模板？" / "list styles" | Show all above | |
-| *(not specified)* | `nb-pro` | |
+**Call the `mofa_list_styles` tool to see the live catalog on this deployment.** The set of installed styles drifts between releases — relying on a hardcoded list here would lie. The tool returns each style's `name`, `display_name`, `description`, `variants`, `tags`, and `category` so you can recommend intelligently.
+
+If the user asks "有哪些模板？" / "list styles", call `mofa_list_styles` and surface the result; do NOT recite a memorized list.
+
+If you pass a `style` name that isn't installed, `mofa_slides` errors out with the available list — it no longer silently substitutes a different theme.
+
+### Common categories (for quick orientation, not a definitive list)
+
+| User vibe | Style names to try (verify with `mofa_list_styles`) |
+|-----------|------|
+| 红色企业、华为风、商务红 | `agentic-enterprise-red` |
+| 紫色企业、咨询风、McKinsey | `agentic-enterprise`, `nb-pro` |
+| 极简、北欧、MUJI、IKEA | `nordic-minimal` |
+| 专业、商务、正式 | `nb-pro` |
+| 科幻、赛博朋克、Blade Runner | `nb-br` |
+| 暗色、社区、开源社区 | `dark-community` |
+| 学术、科研、论文 | `what-is-life` |
+| 开源、卡通鲸鱼 | `opensource` |
+| 暖色、琥珀、电影感 | `cc-research` |
+| 产品发布、DJI、大疆 | `vlinka-dji` |
+| 多品牌对比 | `multi-brand` |
+| 简笔画、greeting | `relevant` |
+| 策略、咨询、薰衣草 | `tectonic` |
+| 开源企业、红黑 | `openclaw-red` |
+| 丰子恺、水墨、童趣 | `fengzikai` |
+| 岭南、国画、水彩、花鸟 | `lingnan` |
+| 会议、峰会、GOBI | `gobi` |
+| *(not specified)* | `nb-pro` |
 
 Set per-slide variant via JSON `"style"` field (e.g. `"style": "cover"`). Defaults to `"normal"`.
 
@@ -388,14 +429,16 @@ This is the best mode for editable presentations. AI generates a text-free illus
 ]
 ```
 
-### Mode 3: Auto-layout (VQA, fully automated)
+### Mode 3: Auto-layout (VQA) — only when explicitly requested
 
-Same JSON as Mode 1 — just add `--auto-layout` flag. The tool generates the image WITH text, uses Gemini VQA to extract text positions, then removes text from the image, and overlays editable text boxes automatically. No manual `texts` needed.
+**Re-read "When NOT to use auto_layout" above before reaching for this.** If the user said "editable PPT" without specifying VQA, you want Mode 2, not this. The example below is shown so you understand the JSON shape, not as a recommendation.
+
+Same JSON as Mode 1 — just add the `auto_layout: true` per-slide flag (or top-level / `--auto-layout`). The tool generates the image WITH text, uses Gemini VQA to extract text positions, runs Qwen-Edit to remove text from the image, and overlays editable text boxes. Slower, more expensive, and the output usually needs manual cleanup.
 
 ```json
 [
-  { "prompt": "Cover slide with large centered title: \"AI Strategy Report\". Dramatic background.", "style": "cover" },
-  { "prompt": "Title: \"Key Findings\". Three metric cards in a row showing Revenue, Users, NPS.", "style": "normal" }
+  { "prompt": "Cover slide with large centered title: \"AI Strategy Report\". Dramatic background.", "style": "cover", "auto_layout": true },
+  { "prompt": "Title: \"Key Findings\". Three metric cards in a row showing Revenue, Users, NPS.", "style": "normal", "auto_layout": true }
 ]
 ```
 
@@ -403,10 +446,12 @@ Same JSON as Mode 1 — just add `--auto-layout` flag. The tool generates the im
 
 Provide existing page images as `source_image` + `auto_layout: true`. Skips AI generation, runs VQA + text removal on existing images.
 
+`source_image` paths are workspace-relative (the host does NOT rebind input paths the way it rebinds `out` / `slide_dir`). Drop your extracted PDF pages somewhere predictable under the slides project — e.g. `slides/<slug>/assets/pdf-pages/page-NN.png` — and reference them directly:
+
 ```json
 [
-  { "prompt": "page 1", "source_image": "skill-output/pdf-pages/page-01.png", "auto_layout": true },
-  { "prompt": "page 2", "source_image": "skill-output/pdf-pages/page-02.png", "auto_layout": true }
+  { "prompt": "page 1", "source_image": "slides/<slug>/assets/pdf-pages/page-01.png", "auto_layout": true },
+  { "prompt": "page 2", "source_image": "slides/<slug>/assets/pdf-pages/page-02.png", "auto_layout": true }
 ]
 ```
 
@@ -429,7 +474,7 @@ Provide existing page images as `source_image` + `auto_layout: true`. Skips AI g
 | `-o` / `--out` | *required* | Output PPTX file path |
 | `--slide-dir` | *required* | Directory for intermediate PNGs |
 | `-i` / `--input` | stdin | Input JSON file path |
-| `--auto-layout` | false | Enable editable mode (VQA + qwen-image-edit) for ALL slides |
+| `--auto-layout` | false | Force VQA + qwen-image-edit on ALL slides. Avoid unless the user explicitly asks for VQA extraction or you're doing PDF-to-PPTX — use `texts` (Mode 2) for normal "editable" requests. |
 | `--concurrency` | 5 | Parallel generation (1-20) |
 | `--image-size` | config | `"1K"` / `"2K"` / `"4K"` |
 | `--gen-model` | gemini-3.1-flash-image-preview | Image generation model |

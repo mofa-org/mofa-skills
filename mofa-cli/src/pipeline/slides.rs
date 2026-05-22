@@ -4,11 +4,11 @@ use crate::config::MofaConfig;
 use crate::dashscope::DashscopeClient;
 use crate::deepseek_ocr::DeepSeekOcrClient;
 use crate::gemini::{BatchImageRequest, GeminiClient};
-use crate::openai::OpenAIImageClient;
 use crate::layout::{
     extract_text_layout, extract_text_layout_deepseek, refine_text_layout, ANTI_LEAK_RULES,
     NO_TEXT_INSTRUCTION, SH, SW,
 };
+use crate::openai::OpenAIImageClient;
 use crate::pptx::{self, ImageOverlay, SlideData, TextOverlay};
 use crate::style::Style;
 use eyre::Result;
@@ -152,7 +152,14 @@ fn generate_image(
     if model.starts_with("gpt-image") {
         if let Some(ref oa) = openai {
             return oa
-                .gen_image(prompt, out_file, image_size, Some("16:9"), Some(model), Some(label))
+                .gen_image(
+                    prompt,
+                    out_file,
+                    image_size,
+                    Some("16:9"),
+                    Some(model),
+                    Some(label),
+                )
                 .ok()
                 .flatten()
                 .inspect(|path| {
