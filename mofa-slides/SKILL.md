@@ -446,10 +446,12 @@ Same JSON as Mode 1 — just add the `auto_layout: true` per-slide flag (or top-
 
 Provide existing page images as `source_image` + `auto_layout: true`. Skips AI generation, runs VQA + text removal on existing images.
 
+`source_image` paths are workspace-relative (the host does NOT rebind input paths the way it rebinds `out` / `slide_dir`). Drop your extracted PDF pages somewhere predictable under the slides project — e.g. `slides/<slug>/assets/pdf-pages/page-NN.png` — and reference them directly:
+
 ```json
 [
-  { "prompt": "page 1", "source_image": "skill-output/pdf-pages/page-01.png", "auto_layout": true },
-  { "prompt": "page 2", "source_image": "skill-output/pdf-pages/page-02.png", "auto_layout": true }
+  { "prompt": "page 1", "source_image": "slides/<slug>/assets/pdf-pages/page-01.png", "auto_layout": true },
+  { "prompt": "page 2", "source_image": "slides/<slug>/assets/pdf-pages/page-02.png", "auto_layout": true }
 ]
 ```
 
