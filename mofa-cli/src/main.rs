@@ -546,14 +546,13 @@ fn plugin_slides(
     } else {
         let available = style::list_style_names(&builtin_dir);
         let list = if available.is_empty() {
-            format!("(none found in {})", builtin_dir.display())
+            "(no styles installed on this deployment)".to_string()
         } else {
             available.join(", ")
         };
         eyre::bail!(
-            "style '{style_name}' not found under {}. Available: {list}. \
-             Call the `mofa_list_styles` tool to inspect variants and descriptions.",
-            builtin_dir.display()
+            "style '{style_name}' not found. Available: {list}. \
+             Call the `mofa_list_styles` tool to inspect variants and descriptions."
         );
     };
     let loaded_style = style::load_style(&style_file)?;
@@ -929,6 +928,22 @@ fn plugin_list_styles(
         .get("skill")
         .and_then(|v| v.as_str())
         .unwrap_or("slides");
+    // Reject path separators / parent-dir escapes / leading dots. Without
+    // this, `skill=slides/../_unpublished/mofa-video` would resolve to
+    // `mofa-_unpublished/mofa-video/styles` and let callers list TOML
+    // files outside the intended catalog. Treat the input as a single
+    // ASCII slug.
+    if skill.is_empty()
+        || skill.starts_with('.')
+        || skill
+            .chars()
+            .any(|c| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+    {
+        eyre::bail!(
+            "invalid skill name: '{skill}'. Must be a single ASCII slug \
+             (letters, digits, '-', '_'), no path separators or leading dots."
+        );
+    }
     let styles_dir = find_styles_dir(mofa_root, skill);
     let names = style::list_style_names(&styles_dir);
 
@@ -986,22 +1001,14 @@ fn plugin_list_styles(
 
     let summary = serde_json::json!({
         "skill": skill,
-        "styles_dir": styles_dir.to_string_lossy(),
         "count": names.len(),
         "styles": styles_json,
     });
 
     let human = if names.is_empty() {
-        format!(
-            "No styles found under {} (skill={skill})",
-            styles_dir.display()
-        )
+        format!("No {skill} styles available on this deployment")
     } else {
-        let mut lines = vec![format!(
-            "{} {skill} styles available (from {}):",
-            names.len(),
-            styles_dir.display()
-        )];
+        let mut lines = vec![format!("{} {skill} styles available:", names.len())];
         for s in &summary["styles"].as_array().cloned().unwrap_or_default() {
             let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("?");
             let display = s.get("display_name").and_then(|v| v.as_str()).unwrap_or("");

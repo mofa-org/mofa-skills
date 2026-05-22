@@ -22,7 +22,7 @@ CLI: `mofa slides` | Styles: `mofa-slides/styles/*.toml` | Config: `mofa/config.
 "slide_dir": "slides/<slug>/output/imgs"
 ```
 
-The deck ends up at `<workspace>/skill-output/slides/<slug>/output/deck.pptx`, the workspace contract picks it up via the plugin's `files_to_send`, and the deck is auto-delivered.
+The deck ends up at `<workspace>/skill-output/slides/<slug>/output/deck.pptx`. The host detects the `.pptx` output from the LLM-supplied `out` arg and the workspace contract surfaces it to the user automatically; no extra delivery step is needed from you.
 
 **Standalone (outside Octos)** — use a unique per-request subdirectory under the current working directory:
 
