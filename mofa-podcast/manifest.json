@@ -12,7 +12,7 @@
   "tools": [
     {
       "name": "podcast_voices",
-      "description": "List all available voices for podcast speakers. Shows preset (built-in) voices and any saved custom/cloned voices. Call this when helping the user choose voices for their speakers.",
+      "description": "List all available voices for podcast speakers. Shows preset (built-in) voices and any saved custom/cloned voices. Call this only when the user explicitly asks to browse or choose voices; do not call it as a precheck before podcast_generate.",
       "input_schema": {
         "type": "object",
         "properties": {}

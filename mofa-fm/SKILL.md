@@ -8,11 +8,27 @@ always: false
 
 # MoFA FM — Text-to-Speech
 
+## CRITICAL anti-patterns
+
+**Do NOT call `fm_voice_list` as a precheck before `fm_tts` or podcast
+generation.** `fm_voice_list` is a recovery and explicit-listing tool, not a
+TTS prerequisite.
+
+Call `fm_voice_list` only when:
+- `fm_tts` or podcast generation returns `Unknown voice 'NAME'`, `Voice not
+  found`, or an equivalent unavailable-voice error.
+- The user explicitly asks to list or browse available voices.
+
+If a user names a voice you do not recognize, call `fm_tts` directly with that
+voice. The error path is short and recoverable; a preemptive voice catalog dump
+wastes a turn and can prevent the actual TTS call from happening.
+
 ## How to use
 
 1. Call `fm_tts` directly with the full text. It runs in background and delivers the audio automatically.
 2. Do NOT use spawn, shell scripts, or manual text splitting.
-3. Call `fm_voice_list` before TTS to check available voices (preset + custom).
+3. Do NOT call `fm_voice_list` before TTS. Use it only for recovery or explicit
+   list/browse requests.
 
 ## Voices
 
