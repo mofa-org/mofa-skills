@@ -92,7 +92,7 @@
     },
     {
       "name": "fm_voice_save",
-      "description": "Save an audio file as a named custom voice in the local registry. ALWAYS call fm_voice_list first to check if the voice already exists — do NOT re-save existing voices. Only save new voices from user-provided audio clips (3-10 seconds of clear speech). This is a LOCAL operation: the skill normalizes the audio to WAV and records the name->path mapping. There is NO ominix-api round-trip at save time. Qwen3-TTS voice cloning is few-shot inline at synthesis time — fm_tts later sends the reference WAV as multipart to POST /v1/audio/tts/clone.",
+      "description": "Save an audio file as a named custom voice in the local registry. Do NOT re-save existing voices; if the user explicitly asks to inspect existing voices before saving, use fm_voice_list for that listing workflow. Do not use fm_voice_list as a precheck before fm_tts or podcast generation. Only save new voices from user-provided audio clips (3-10 seconds of clear speech). This is a LOCAL operation: the skill normalizes the audio to WAV and records the name->path mapping. There is NO ominix-api round-trip at save time. Qwen3-TTS voice cloning is few-shot inline at synthesis time — fm_tts later sends the reference WAV as multipart to POST /v1/audio/tts/clone.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -133,7 +133,7 @@
     },
     {
       "name": "fm_voice_list",
-      "description": "List all available voices (preset + saved custom). Call this FIRST before any TTS or voice_save to check what voices already exist.",
+      "description": "List all available voices (preset + saved custom). Recovery/explicit-listing only: do NOT call this before fm_tts or podcast generation. Call it after an Unknown voice / Voice not found / unavailable-voice error, or when the user explicitly asks to list or browse voices.",
       "input_schema": {
         "type": "object",
         "properties": {}

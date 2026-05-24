@@ -29,6 +29,12 @@ Preset voices (built-in): vivian (default), serena, ryan, aiden, eric, dylan, un
 
 Custom/cloned voices: use `fm_voice_save` in mofa-fm to save cloned voices first, then reference them by name.
 
+Do NOT call `fm_voice_list` from mofa-fm as a precheck before generating a
+podcast. If the user names speaker voices, use those names directly in the
+script and let `podcast_generate`/TTS return a recoverable unknown-voice error
+if a voice is unavailable. Use voice-listing tools only when the user explicitly
+asks to browse or choose voices.
+
 ## Script Format
 
 The generated script uses this format:
