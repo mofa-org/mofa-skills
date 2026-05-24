@@ -905,10 +905,19 @@ fn is_skippable_script_metadata(line: &str) -> bool {
         || line == "---"
 }
 
+fn parse_duration_seconds(value: &str, unit: Option<&str>, default_s: u32) -> u32 {
+    let seconds = value.parse::<u32>().unwrap_or(default_s);
+    match unit.unwrap_or("s") {
+        "m" | "M" | "分" => seconds.saturating_mul(60),
+        _ => seconds,
+    }
+}
+
 fn parse_script_report(script: &str) -> ScriptParseReport {
     let dialogue_re = Regex::new(r"^\[([^\]\-]+)\s*-\s*([^\],]+),\s*([^\]]+)\]\s*(.*)$").unwrap();
-    let bgm_re = Regex::new(r"^\[BGM:\s*([^—\-]+)[—\-]\s*([^,]+),\s*(\d+)s?\]").unwrap();
-    let pause_re = Regex::new(r"^\[PAUSE:\s*(\d+)s?\]").unwrap();
+    let bgm_re =
+        Regex::new(r"^\[BGM:\s*([^—\-]+)[—\-]\s*([^,]+),\s*(\d+)\s*([sS]|秒|[mM]|分)?\]").unwrap();
+    let pause_re = Regex::new(r"^\[PAUSE:\s*(\d+)\s*([sS]|秒|[mM]|分)?\]").unwrap();
 
     let mut lines = Vec::new();
     let mut invalid_lines = Vec::new();
@@ -936,11 +945,19 @@ fn parse_script_report(script: &str) -> ScriptParseReport {
             lines.push(ScriptLine::Bgm {
                 description: caps[1].trim().to_string(),
                 fade: caps[2].trim().to_string(),
-                duration_s: caps[3].parse().unwrap_or(3),
+                duration_s: parse_duration_seconds(
+                    &caps[3],
+                    caps.get(4).map(|unit| unit.as_str()),
+                    3,
+                ),
             });
         } else if let Some(caps) = pause_re.captures(&normalized_line.text) {
             lines.push(ScriptLine::Pause {
-                duration_s: caps[1].parse().unwrap_or(2),
+                duration_s: parse_duration_seconds(
+                    &caps[1],
+                    caps.get(2).map(|unit| unit.as_str()),
+                    2,
+                ),
             });
         } else if let Some(caps) = dialogue_re.captures(&normalized_line.text) {
             let character = caps[1].trim().to_string();
@@ -1404,7 +1421,7 @@ fn generate_podcast(
                 return Err(format!(
                     "Failed to read script file '{}': {e}",
                     resolved.display()
-                ))
+                ));
             }
         }
     } else {
@@ -2008,8 +2025,38 @@ mod tests {
     }
 
     #[test]
+    fn parse_bgm_with_chinese_seconds_suffix() {
+        let script = "[BGM: 新闻开场音乐 — 渐入，5秒]";
+        let lines = parse_script(script);
+        assert_eq!(lines.len(), 1);
+        match &lines[0] {
+            ScriptLine::Bgm {
+                description,
+                fade,
+                duration_s,
+            } => {
+                assert_eq!(description, "新闻开场音乐");
+                assert_eq!(fade, "渐入");
+                assert_eq!(*duration_s, 5);
+            }
+            _ => panic!("Expected Bgm"),
+        }
+    }
+
+    #[test]
     fn parse_pause() {
         let script = "[PAUSE: 2s]";
+        let lines = parse_script(script);
+        assert_eq!(lines.len(), 1);
+        match &lines[0] {
+            ScriptLine::Pause { duration_s } => assert_eq!(*duration_s, 2),
+            _ => panic!("Expected Pause"),
+        }
+    }
+
+    #[test]
+    fn parse_pause_with_chinese_seconds_suffix() {
+        let script = "[PAUSE: 2秒]";
         let lines = parse_script(script);
         assert_eq!(lines.len(), 1);
         match &lines[0] {
@@ -2027,6 +2074,15 @@ mod tests {
             ScriptLine::Pause { duration_s } => assert_eq!(*duration_s, 3),
             _ => panic!("Expected Pause"),
         }
+    }
+
+    #[test]
+    fn parse_duration_minute_suffixes_as_seconds() {
+        let script = "[PAUSE: 1m]\n[PAUSE: 2分]";
+        let lines = parse_script(script);
+        assert_eq!(lines.len(), 2);
+        assert!(matches!(&lines[0], ScriptLine::Pause { duration_s: 60 }));
+        assert!(matches!(&lines[1], ScriptLine::Pause { duration_s: 120 }));
     }
 
     #[test]
@@ -2112,6 +2168,39 @@ mod tests {
             }
             _ => panic!("Expected Dialogue"),
         }
+    }
+
+    #[test]
+    fn parse_chinese_bgm_and_pause_cues_from_issue_893() {
+        let script = r#"[BGM: 新闻开场音乐 — 渐入，5秒]
+[主持人 - vivian, cheerful] 欢迎收听今天的节目。
+[PAUSE: 2秒]
+[嘉宾 - ryan, thoughtful] 今天我们讨论中美领袖会晤。
+[PAUSE: 3秒]
+[BGM: 新闻结束音乐 — 渐出，5秒]"#;
+        let report = parse_script_report(script);
+        assert!(
+            report.invalid_lines.is_empty(),
+            "{:?}",
+            report.invalid_lines
+        );
+        assert_eq!(report.lines.len(), 6);
+        assert!(matches!(
+            &report.lines[0],
+            ScriptLine::Bgm { duration_s: 5, .. }
+        ));
+        assert!(matches!(
+            &report.lines[2],
+            ScriptLine::Pause { duration_s: 2 }
+        ));
+        assert!(matches!(
+            &report.lines[4],
+            ScriptLine::Pause { duration_s: 3 }
+        ));
+        assert!(matches!(
+            &report.lines[5],
+            ScriptLine::Bgm { duration_s: 5, .. }
+        ));
     }
 
     #[test]
@@ -2704,6 +2793,30 @@ mod tests {
         let cancel = AtomicBool::new(false);
         let err = generate_podcast(input, &cancel).unwrap_err();
         assert!(err.contains("unknown voice"));
+        let _ = std::fs::remove_dir_all(&output_dir);
+    }
+
+    #[test]
+    fn generate_podcast_accepts_chinese_time_suffixes_before_voice_validation() {
+        let output_dir = unique_test_dir("chinese-time-suffix-smoke");
+        let input = GenerateInput {
+            script: Some(
+                r#"[BGM: 新闻开场音乐 — 渐入，5秒]
+[主持人 - not_a_real_voice, cheerful] 欢迎收听今天的节目。
+[PAUSE: 2秒]
+[BGM: 新闻结束音乐 — 渐出，5秒]"#
+                    .to_string(),
+            ),
+            script_path: None,
+            output_dir: Some(output_dir.to_string_lossy().to_string()),
+        };
+        let cancel = AtomicBool::new(false);
+        let err = generate_podcast(input, &cancel).unwrap_err();
+        assert!(err.contains("unknown voice"), "{err}");
+        assert!(
+            !err.contains("malformed non-metadata lines"),
+            "Chinese duration suffixes must parse before voice validation: {err}"
+        );
         let _ = std::fs::remove_dir_all(&output_dir);
     }
 

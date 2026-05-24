@@ -69,6 +69,14 @@ The generated script uses this format:
 [BGM: Outro music — fade-out, 5s]
 ```
 
+Chinese-language scripts may use Chinese metadata text and duration suffixes:
+
+```markdown
+[BGM: 新闻开场音乐 — 渐入，5秒]
+[主持人 - vivian, cheerful] 大家好，欢迎收听今天的节目！
+[PAUSE: 2秒]
+```
+
 ### Emotion tags
 
 Supported emotions (mapped to TTS style prompts):
@@ -86,13 +94,14 @@ Supported emotions (mapped to TTS style prompts):
 ### BGM cues
 
 Background music placeholders — actual music files are mixed in post-production:
-- `[BGM: description — fade-in, Ns]` — music fades in over N seconds
-- `[BGM: description — fade-out, Ns]` — music fades out
-- `[BGM: description — crossfade, Ns]` — crossfade transition
+- `[BGM: description — fade-in, Ns]` or `[BGM: 描述 — 渐入，N秒]` — music fades in over N seconds
+- `[BGM: description — fade-out, Ns]` or `[BGM: 描述 — 渐出，N秒]` — music fades out
+- `[BGM: description — crossfade, Ns]` or `[BGM: 描述 — 交叉淡入淡出，N秒]` — crossfade transition
 
 ### Pause cues
 
-- `[PAUSE: Ns]` — insert N seconds of silence (1-3s typical)
+- `[PAUSE: Ns]` or `[PAUSE: N秒]` — insert N seconds of silence (1-3s typical)
+- `[PAUSE: Nm]` or `[PAUSE: N分]` — insert N minutes of silence when a longer pause is explicitly needed
 
 ## Generation Engine
 
