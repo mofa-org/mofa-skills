@@ -13,8 +13,8 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -431,29 +431,71 @@ fn try_convert_to_mp3(wav_path: &str, mp3_path: &str) -> String {
 }
 
 fn default_tts_output_mp3_path(voice_tag: &str, text: &str) -> PathBuf {
-    let text_preview: String = text
-        .chars()
-        .take(20)
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>()
-        .trim_end_matches('_')
-        .to_string();
-    let filename = format!("{voice_tag}_{text_preview}_{}.mp3", timestamp());
+    let filename = tts_output_filename(voice_tag, text, &date_stamp());
     if let Ok(work_dir) = std::env::var("OCTOS_WORK_DIR") {
         let dir = Path::new(&work_dir);
         let _ = std::fs::create_dir_all(dir);
-        return dir.join(filename);
+        return unique_output_path(dir.join(filename));
     }
     match std::env::current_dir() {
-        Ok(dir) => dir.join(filename),
-        Err(_) => PathBuf::from(format!("/tmp/{filename}")),
+        Ok(dir) => unique_output_path(dir.join(filename)),
+        Err(_) => unique_output_path(PathBuf::from(format!("/tmp/{filename}"))),
     }
+}
+
+fn tts_output_filename(voice_tag: &str, text: &str, date: &str) -> String {
+    let voice = safe_filename_fragment(voice_tag, 32, "default");
+    let preview = safe_filename_fragment(text, 20, "tts");
+    format!("{voice}_{preview}_{date}.mp3")
+}
+
+fn safe_filename_fragment(input: &str, max_chars: usize, fallback: &str) -> String {
+    let mut out = String::new();
+    let mut last_was_separator = false;
+    for ch in input.chars() {
+        if out.chars().count() >= max_chars {
+            break;
+        }
+        if ch.is_alphanumeric() || ch == '-' {
+            out.push(ch);
+            last_was_separator = false;
+        } else if !out.is_empty() && !last_was_separator {
+            out.push('_');
+            last_was_separator = true;
+        }
+    }
+
+    let trimmed = out.trim_matches('_');
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn unique_output_path(path: PathBuf) -> PathBuf {
+    if !path.exists() {
+        return path;
+    }
+
+    let parent = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("output");
+    let extension = path.extension().and_then(|extension| extension.to_str());
+
+    for index in 2.. {
+        let filename = match extension {
+            Some(extension) if !extension.is_empty() => format!("{stem}-{index}.{extension}"),
+            _ => format!("{stem}-{index}"),
+        };
+        let candidate = parent.join(filename);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("unbounded suffix search must find an unused output path")
 }
 
 fn resolve_tts_output_paths(
@@ -644,6 +686,32 @@ fn timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+fn date_stamp() -> String {
+    date_stamp_from_timestamp(timestamp())
+}
+
+fn date_stamp_from_timestamp(timestamp: u64) -> String {
+    let days = (timestamp / 86_400) as i64;
+    let (year, month, day) = civil_from_unix_days(days);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn civil_from_unix_days(days: i64) -> (i32, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let day_of_era = z - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_piece = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_piece + 2) / 5 + 1;
+    let month = month_piece + if month_piece < 10 { 3 } else { -9 };
+    year += if month <= 2 { 1 } else { 0 };
+
+    (year as i32, month as u32, day as u32)
 }
 
 fn now_iso() -> String {
@@ -866,9 +934,7 @@ fn handle_tts(input_json: &str, cancel: &AtomicBool) {
                 }
             }
             Err(e) => {
-                eprintln!(
-                    "Warning: could not verify voice against /v1/voices ({e}); proceeding."
-                );
+                eprintln!("Warning: could not verify voice against /v1/voices ({e}); proceeding.");
             }
         }
     }
@@ -1283,13 +1349,82 @@ fn status_for(name: &str, classes: Option<&[(String, VoiceStatus)]>) -> String {
     String::new()
 }
 
+// ── fm_voice_delete ──────────────────────────────────────────────────
+
+fn handle_voice_delete(input_json: &str) {
+    let input: VoiceDeleteInput = match serde_json::from_str(input_json) {
+        Ok(v) => v,
+        Err(e) => fail(&format!("Invalid input: {e}")),
+    };
+
+    let name = input.name.to_lowercase();
+
+    if is_preset(&name) {
+        fail(&format!("Cannot delete preset voice '{name}'"));
+    }
+
+    let mut reg = load_registry();
+
+    if let Some(entry) = reg.voices.remove(&name) {
+        // Delete the audio file
+        let path = voices_dir().join(&entry.file);
+        if path.exists() {
+            std::fs::remove_file(&path).ok();
+        }
+
+        // Clear default if it was this voice
+        if reg.default_voice.as_deref() == Some(&name) {
+            reg.default_voice = None;
+        }
+
+        save_registry(&reg);
+        succeed(&format!("Voice '{name}' deleted."));
+    } else {
+        fail(&format!(
+            "Custom voice '{name}' not found. Use fm_voice_list to see available voices."
+        ));
+    }
+}
+
+// ── Main ─────────────────────────────────────────────────────────────
+
+fn main() {
+    if !cfg!(target_os = "macos") {
+        fail("mofa-fm requires macOS (ominix-api TTS is Apple Silicon only)");
+    }
+
+    // Plugin-protocol-v2 cancel signal (M8 W4). The thread captures
+    // SIGTERM, sets the flag, and exits 130 on its own; long-running
+    // tools also poll the flag at checkpoints so they unwind cleanly.
+    let cancel = install_sigterm_handler();
+
+    let args: Vec<String> = std::env::args().collect();
+    let tool_name = args.get(1).map(|s| s.as_str()).unwrap_or("unknown");
+
+    let mut buf = String::new();
+    if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
+        fail(&format!("Failed to read stdin: {e}"));
+    }
+
+    match tool_name {
+        "fm_tts" => handle_tts(&buf, &cancel),
+        "fm_voice_save" => handle_voice_save(&buf, &cancel),
+        "fm_voice_list" => handle_voice_list(&buf),
+        "fm_voice_delete" => handle_voice_delete(&buf),
+        _ => fail(&format!(
+            "Unknown tool '{tool_name}'. Expected: fm_tts, fm_voice_save, fm_voice_list, fm_voice_delete"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_voice_entries, fetch_registered_voices, http_client, parse_registered_voices,
-        pcm_to_wav, resolve_tts_output_paths, try_convert_to_mp3, validate_pcm_payload,
-        validate_requested_voice, validate_wav_payload, voice_in_registry, VoiceStatus,
-        MIN_TTS_AUDIO_PAYLOAD_BYTES,
+        MIN_TTS_AUDIO_PAYLOAD_BYTES, VoiceStatus, classify_voice_entries,
+        date_stamp_from_timestamp, fetch_registered_voices, http_client, parse_registered_voices,
+        pcm_to_wav, resolve_tts_output_paths, try_convert_to_mp3, tts_output_filename,
+        unique_output_path, validate_pcm_payload, validate_requested_voice, validate_wav_payload,
+        voice_in_registry,
     };
     use serde_json::json;
     use std::net::TcpListener;
@@ -1382,6 +1517,46 @@ mod tests {
             resolve_tts_output_paths(Some("/tmp/sample.wav".to_string()), "serena", "hello");
         assert_eq!(final_path, "/tmp/sample.wav");
         assert_eq!(wav_path, "/tmp/sample.wav");
+    }
+
+    #[test]
+    fn default_tts_filename_uses_voice_text_and_date() {
+        assert_eq!(
+            tts_output_filename("yangmi", "今日新闻速报：中美关系", "2026-04-02"),
+            "yangmi_今日新闻速报_中美关系_2026-04-02.mp3"
+        );
+        assert_eq!(
+            tts_output_filename("clone:yangmi", "!!!", "2026-04-02"),
+            "clone_yangmi_tts_2026-04-02.mp3"
+        );
+    }
+
+    #[test]
+    fn date_stamp_from_timestamp_matches_issue_example() {
+        assert_eq!(date_stamp_from_timestamp(1_775_167_542), "2026-04-02");
+    }
+
+    #[test]
+    fn default_tts_path_adds_suffix_on_collision() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "mofa-fm-tts-collision-{}-{nonce}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("yangmi_今日新闻速报_2026-04-02.mp3"), "first").unwrap();
+        std::fs::write(dir.join("yangmi_今日新闻速报_2026-04-02-2.mp3"), "second").unwrap();
+
+        let candidate = unique_output_path(dir.join("yangmi_今日新闻速报_2026-04-02.mp3"));
+        assert_eq!(
+            candidate.file_name().and_then(|name| name.to_str()),
+            Some("yangmi_今日新闻速报_2026-04-02-3.mp3")
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -1565,73 +1740,5 @@ mod tests {
         assert!(voice_in_registry("vivian", &registered));
         assert!(voice_in_registry("serena", &registered));
         assert!(!voice_in_registry("ryan", &registered));
-    }
-}
-
-// ── fm_voice_delete ──────────────────────────────────────────────────
-
-fn handle_voice_delete(input_json: &str) {
-    let input: VoiceDeleteInput = match serde_json::from_str(input_json) {
-        Ok(v) => v,
-        Err(e) => fail(&format!("Invalid input: {e}")),
-    };
-
-    let name = input.name.to_lowercase();
-
-    if is_preset(&name) {
-        fail(&format!("Cannot delete preset voice '{name}'"));
-    }
-
-    let mut reg = load_registry();
-
-    if let Some(entry) = reg.voices.remove(&name) {
-        // Delete the audio file
-        let path = voices_dir().join(&entry.file);
-        if path.exists() {
-            std::fs::remove_file(&path).ok();
-        }
-
-        // Clear default if it was this voice
-        if reg.default_voice.as_deref() == Some(&name) {
-            reg.default_voice = None;
-        }
-
-        save_registry(&reg);
-        succeed(&format!("Voice '{name}' deleted."));
-    } else {
-        fail(&format!(
-            "Custom voice '{name}' not found. Use fm_voice_list to see available voices."
-        ));
-    }
-}
-
-// ── Main ─────────────────────────────────────────────────────────────
-
-fn main() {
-    if !cfg!(target_os = "macos") {
-        fail("mofa-fm requires macOS (ominix-api TTS is Apple Silicon only)");
-    }
-
-    // Plugin-protocol-v2 cancel signal (M8 W4). The thread captures
-    // SIGTERM, sets the flag, and exits 130 on its own; long-running
-    // tools also poll the flag at checkpoints so they unwind cleanly.
-    let cancel = install_sigterm_handler();
-
-    let args: Vec<String> = std::env::args().collect();
-    let tool_name = args.get(1).map(|s| s.as_str()).unwrap_or("unknown");
-
-    let mut buf = String::new();
-    if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
-        fail(&format!("Failed to read stdin: {e}"));
-    }
-
-    match tool_name {
-        "fm_tts" => handle_tts(&buf, &cancel),
-        "fm_voice_save" => handle_voice_save(&buf, &cancel),
-        "fm_voice_list" => handle_voice_list(&buf),
-        "fm_voice_delete" => handle_voice_delete(&buf),
-        _ => fail(&format!(
-            "Unknown tool '{tool_name}'. Expected: fm_tts, fm_voice_save, fm_voice_list, fm_voice_delete"
-        )),
     }
 }
