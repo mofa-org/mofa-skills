@@ -7,6 +7,14 @@ on:
     branches: [main]
 
 jobs:
+  tool-description-lint:
+    name: Tool description exclusivity lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 scripts/lint-tool-descriptions.py --self-test
+      - run: python3 scripts/lint-tool-descriptions.py
+
   rust:
     name: Rust (check + clippy + test)
     strategy:

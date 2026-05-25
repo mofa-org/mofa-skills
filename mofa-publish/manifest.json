@@ -19,7 +19,7 @@
       "name": "mofa_publish",
       "spawn_only": true,
       "spawn_only_message": "SUCCESS: Site deployment is now running in background. The live URL will be reported when the deploy completes. No further action needed for this request.",
-      "description": "Deploy a static site to GitHub Pages or Mac Mini hosting. Handles repo creation, branch setup, Pages configuration, file transfer, and verification. Runs in background — do NOT wait for it.",
+      "description": "Deploy a built static site to GitHub Pages or Mac Mini hosting. Handles repo creation, branch setup, Pages configuration, file transfer, and verification. NOT for site generation — use `mofa_site` for site creation. Runs in background — do NOT wait for it.",
       "input_schema": {
         "type": "object",
         "properties": {
