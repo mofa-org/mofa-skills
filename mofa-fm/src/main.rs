@@ -208,20 +208,34 @@ fn save_registry(reg: &VoiceRegistry) {
 }
 
 /// Resolve a voice name: returns Some(wav_path) for custom voices, None for presets.
-fn resolve_custom_voice(name: &str) -> Option<PathBuf> {
-    let reg = load_registry();
-    if let Some(entry) = reg.voices.get(name) {
-        let path = voices_dir().join(&entry.file);
+fn resolve_custom_voice_from(
+    name: &str,
+    registry: &VoiceRegistry,
+    voice_dir: &Path,
+) -> Option<PathBuf> {
+    if let Some(entry) = registry.voices.get(name) {
+        let path = voice_dir.join(&entry.file);
         if path.exists() {
             return Some(path);
         }
     }
     // Try direct file lookup in voices dir (e.g. <name>.wav without registry entry)
-    let direct = voices_dir().join(format!("{name}.wav"));
+    let direct = voice_dir.join(format!("{name}.wav"));
     if direct.exists() {
         return Some(direct);
     }
     None
+}
+
+/// Resolve a voice name: returns Some(wav_path) for custom voices, None for presets.
+fn resolve_custom_voice(name: &str) -> Option<PathBuf> {
+    let reg = load_registry();
+    let voice_dir = voices_dir();
+    resolve_custom_voice_from(name, &reg, &voice_dir)
+}
+
+fn should_validate_voice_with_ominix(custom_voice_path: Option<&Path>) -> bool {
+    custom_voice_path.is_none()
 }
 
 fn is_preset(name: &str) -> bool {
@@ -901,9 +915,10 @@ fn handle_tts(input_json: &str, cancel: &AtomicBool) {
         let reg = load_registry();
         reg.default_voice.unwrap_or_else(|| "vivian".to_string())
     });
+    let custom_voice_path = resolve_custom_voice(&voice_name);
 
     // Validate: must be a known custom voice or a preset
-    if resolve_custom_voice(&voice_name).is_none() && !is_preset(&voice_name) {
+    if custom_voice_path.is_none() && !is_preset(&voice_name) {
         let presets = PRESET_VOICES.join(", ");
         let reg = load_registry();
         let custom: Vec<&str> = reg.voices.keys().map(|s| s.as_str()).collect();
@@ -925,8 +940,7 @@ fn handle_tts(input_json: &str, cancel: &AtomicBool) {
     // the authoritative check. Graceful degradation: if /v1/voices is
     // unreachable, fall through — better to try than block on a transient
     // connectivity issue.
-    let is_local_clone = resolve_custom_voice(&voice_name).is_some();
-    if !is_local_clone {
+    if should_validate_voice_with_ominix(custom_voice_path.as_deref()) {
         match fetch_registered_voices(&client, &base_url) {
             Ok(registered) => {
                 if let Err(msg) = validate_requested_voice(&voice_name, &registered) {
@@ -946,9 +960,9 @@ fn handle_tts(input_json: &str, cancel: &AtomicBool) {
         Some(0.2),
     );
 
-    let wav_bytes = if let Some(ref_path) = resolve_custom_voice(&voice_name) {
+    let wav_bytes = if let Some(ref_path) = custom_voice_path.as_ref() {
         // Custom voice → /v1/audio/tts/clone (multipart with raw WAV)
-        let ref_bytes = match std::fs::read(&ref_path) {
+        let ref_bytes = match std::fs::read(ref_path) {
             Ok(b) => b,
             Err(e) => fail(&format!("Failed to read voice '{}': {e}", voice_name)),
         };
@@ -1043,7 +1057,7 @@ fn handle_tts(input_json: &str, cancel: &AtomicBool) {
     } else {
         try_convert_to_mp3(&wav_output_path, &requested_output_path)
     };
-    let is_custom = resolve_custom_voice(&voice_name).is_some();
+    let is_custom = custom_voice_path.is_some();
     let voice_label = if is_custom {
         format!("{} (custom)", voice_name)
     } else {
@@ -1420,9 +1434,10 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        MIN_TTS_AUDIO_PAYLOAD_BYTES, VoiceStatus, classify_voice_entries,
-        date_stamp_from_timestamp, fetch_registered_voices, http_client, parse_registered_voices,
-        pcm_to_wav, resolve_tts_output_paths, try_convert_to_mp3, tts_output_filename,
+        MIN_TTS_AUDIO_PAYLOAD_BYTES, VoiceEntry, VoiceRegistry, VoiceStatus,
+        classify_voice_entries, date_stamp_from_timestamp, fetch_registered_voices, http_client,
+        parse_registered_voices, pcm_to_wav, resolve_custom_voice_from, resolve_tts_output_paths,
+        should_validate_voice_with_ominix, try_convert_to_mp3, tts_output_filename,
         unique_output_path, validate_pcm_payload, validate_requested_voice, validate_wav_payload,
         voice_in_registry,
     };
@@ -1661,6 +1676,44 @@ mod tests {
     fn should_list_available_when_registry_is_empty() {
         let err = validate_requested_voice("anyone", &[]).unwrap_err();
         assert!(err.contains("(none)"));
+    }
+
+    #[test]
+    fn saved_local_clone_bypasses_ominix_voice_list_after_restart() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "mofa-fm-local-clone-restart-{}-{nonce}",
+            std::process::id()
+        ));
+        let voice_dir = dir.join("voice_profiles");
+        std::fs::create_dir_all(&voice_dir).unwrap();
+        let wav_path = voice_dir.join("yangmi.wav");
+        std::fs::write(&wav_path, b"saved local clone").unwrap();
+
+        let mut registry = VoiceRegistry::default();
+        registry.voices.insert(
+            "yangmi".to_string(),
+            VoiceEntry {
+                file: "yangmi.wav".to_string(),
+                created: Some("2026-05-25T00:00:00Z".to_string()),
+            },
+        );
+
+        let resolved = resolve_custom_voice_from("yangmi", &registry, &voice_dir)
+            .expect("local clone resolves from persisted mofa-fm registry");
+        assert_eq!(resolved, wav_path);
+        assert!(!should_validate_voice_with_ominix(Some(resolved.as_path())));
+
+        let restarted_server_voices = Vec::<String>::new();
+        assert!(
+            validate_requested_voice("yangmi", &restarted_server_voices).is_err(),
+            "regression guard: local clones must not call /v1/voices after an ominix-api restart"
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     // ── graceful degradation (HTTP unreachable) ──────────────────────
