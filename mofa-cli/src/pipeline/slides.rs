@@ -5,8 +5,7 @@ use crate::dashscope::DashscopeClient;
 use crate::deepseek_ocr::DeepSeekOcrClient;
 use crate::gemini::{BatchImageRequest, GeminiClient};
 use crate::layout::{
-    extract_text_layout, extract_text_layout_deepseek, refine_text_layout, ANTI_LEAK_RULES,
-    NO_TEXT_INSTRUCTION, SH, SW,
+    extract_text_layout, extract_text_layout_deepseek, refine_text_layout, ANTI_LEAK_RULES, SH, SW,
 };
 use crate::openai::OpenAIImageClient;
 use crate::pptx::{self, ImageOverlay, SlideData, TextOverlay};
@@ -412,13 +411,15 @@ fn run_slides_sync(
                         ref_paths.lock().unwrap()[idx] = Some(ref_file);
                     }
                 } else {
-                    // Non-VQA mode: image-only OR clean background + manual text overlays
-                    let mut full_prompt = format!("{prefix}\n\n{}{ANTI_LEAK_RULES}", slide.prompt);
-                    if slide.texts.is_some() {
-                        // Clean background mode (like cc-ppt): generate without text,
-                        // user-provided texts will be overlaid as native PowerPoint boxes
-                        full_prompt.push_str(NO_TEXT_INSTRUCTION);
-                    }
+                    // Non-VQA mode: image-only OR clean background + manual text overlays.
+                    //
+                    // VQA / "do not render text" instructions are no longer auto-appended
+                    // here. Per the cc-ppt deck-authoring pattern, the deck author writes a
+                    // per-deck `const VQA = \`...\`` block in their script and splices it
+                    // into every prompt — that keeps the language matching the deck (Chinese
+                    // VQA for Chinese decks, English VQA for English decks) and avoids the
+                    // runtime injecting English directives into a Chinese prompt.
+                    let full_prompt = format!("{prefix}\n\n{}{ANTI_LEAK_RULES}", slide.prompt);
                     let out_path = slide_dir.join(format!("slide-{padded}.png"));
                     if let Some(p) = generate_image(
                         gemini,
@@ -614,10 +615,10 @@ pub fn run(
                     fingerprint,
                 ));
             } else {
-                let mut full_prompt = format!("{prefix}\n\n{}{ANTI_LEAK_RULES}", slide.prompt);
-                if slide.texts.is_some() {
-                    full_prompt.push_str(NO_TEXT_INSTRUCTION);
-                }
+                // VQA / "do not render text" instructions belong in the deck author's
+                // per-deck `const VQA = \`...\`` block (cc-ppt pattern), not in the
+                // runtime — see the matching comment above in the non-batch branch.
+                let full_prompt = format!("{prefix}\n\n{}{ANTI_LEAK_RULES}", slide.prompt);
                 let out_file = slide_dir.join(format!("slide-{padded}.png"));
                 let fingerprint = generation_fingerprint(
                     &full_prompt,
