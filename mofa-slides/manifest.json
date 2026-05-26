@@ -1,6 +1,6 @@
 {
   "name": "mofa-slides",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "timeout_secs": 1800,
   "binaries": {
     "darwin-aarch64": {
