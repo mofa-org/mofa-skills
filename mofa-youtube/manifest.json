@@ -1,6 +1,8 @@
 {
   "name": "mofa-youtube",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "make_type": "video",
+  "content_type_description": "Process a video or audio source. Downloads from a YouTube URL or accepts a local audio path, transcribes via local ASR, returns markdown transcript with timestamps. Keeps the video file for downstream frame extraction.",
   "timeout_secs": 1800,
   "sha256": "fff57bb0f420dcb62070d33614f4e4e1337439b57825560ff294ca925f5e9cb2",
   "tools": [

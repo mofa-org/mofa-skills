@@ -1,6 +1,8 @@
 {
   "name": "mofa-site",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "make_type": "site",
+  "content_type_description": "Static websites: Quarto lesson pages, Astro sites, Next.js apps, React/Vite scaffolds. Pulls content_dir contents into a deployable HTML/JS bundle.",
   "author": "hagency",
   "description": "Build or scaffold websites from structured content. Quarto lesson generation is fully implemented; astro-site, nextjs-app, and react-vite are extracted starter templates exposed through the bootstrap helper and a server-backed three-panel studio.",
   "timeout_secs": 3600,

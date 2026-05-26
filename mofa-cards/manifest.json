@@ -1,6 +1,8 @@
 {
   "name": "mofa-cards",
-  "version": "0.4.5",
+  "version": "0.4.6",
+  "make_type": "cards",
+  "content_type_description": "Trading-card / greeting-card / holiday-card style images (PNG). Each card has a prompt and an optional style variant.",
   "timeout_secs": 1800,
   "binaries": {
     "darwin-aarch64": {

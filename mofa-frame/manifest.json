@@ -1,6 +1,8 @@
 {
   "name": "mofa-frame",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "make_type": "frame",
+  "content_type_description": "Single PNG frame extracted from a video at a specific timestamp. Use after mofa_youtube to capture key moments from a transcript.",
   "timeout_secs": 60,
   "sha256": "17a0c424437c8d26251509377760b7a56cca716d627df83ab6f7ffad454564cc",
   "tools": [

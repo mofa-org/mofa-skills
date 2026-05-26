@@ -1,6 +1,8 @@
 {
   "name": "mofa-infographic",
-  "version": "0.4.5",
+  "version": "0.4.6",
+  "make_type": "infographic",
+  "content_type_description": "Multi-section infographic images (PNG) with AI-generated visuals per section. Header/footer/middle variants, configurable style template.",
   "timeout_secs": 1800,
   "binaries": {
     "darwin-aarch64": {

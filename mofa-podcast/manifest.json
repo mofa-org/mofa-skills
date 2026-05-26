@@ -1,6 +1,9 @@
 {
   "name": "mofa-podcast",
-  "version": "0.4.6",
+  "version": "0.4.7",
+  "make_type": "podcast",
+  "make_target_tool": "podcast_generate",
+  "content_type_description": "Multi-speaker podcast audio (mp3/wav). Reads a markdown script, synthesizes voices, concatenates segments with pauses.",
   "author": "hagency",
   "description": "Multi-speaker podcast generation with TTS voice synthesis and audio assembly",
   "timeout_secs": 1800,
