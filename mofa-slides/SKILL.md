@@ -1,6 +1,6 @@
 ---
 name: mofa-slides
-version: 0.6.0
+version: 0.6.1
 description: "AI-generated visual presentations with full-bleed Gemini images. Triggers: mofa, mofa ppt, mofa deck, slides, 幻灯片, generative slides, build a mofa ppt, 用mofa做PPT, AI deck, 做个PPT, make slides."
 always: true
 requires_bins: mofa
@@ -294,6 +294,67 @@ The style prompt should describe: background, colors, illustration style, decora
 | 手绘、Hand-drawn sketch | `Off-white paper (#FFF9F0). Pencil/pen sketch style illustrations — loose hand-drawn lines, crosshatching. Warm, personal, approachable. Think notebook doodles but polished.` |
 | Retro 80s、复古80年代 | `Dark purple/navy gradient. Neon grid perspective, chrome text style, sunset gradients (pink→orange→purple). Synthwave aesthetic, VHS scanlines. Nostalgic, bold.` |
 | 日式和风、Japanese wa | `Soft cream (#F5F0E1) with indigo (#2C3E6B) accents. Cherry blossoms, wave patterns (seigaiha), torii gates. Delicate, balanced, wabi-sabi minimalism.` |
+
+## Custom styles (full TOML)
+
+Use this when the user asks for a NAMED style that isn't in the built-in catalog (e.g. "puer-woodcut", "ming-lacquer") and you want the style to be reusable across slides / decks. For a one-shot override on a single slide, use `## Custom styles (inline)` above — it's lighter.
+
+**Inline vs full TOML — pick:**
+- **Inline**: one slide, no reuse, prompt-only override.
+- **Full TOML**: every slide in the deck uses it, you want `style: "<your-name>"` to address it by name, OR the style has multiple variants (cover / normal / data).
+
+**Where to save: `<workspace>/styles/<style-name>.toml`** — workspace root, NOT inside `skill-output/`. The mofa-cli binary checks `<cwd>/styles/<name>.toml` before built-ins, and the host's pre-flight validator probes both `<workspace>/styles/` and `<workspace>/skill-output/styles/` — but the doc-canonical location is the workspace root. Picking the wrong place is the #1 cause of "style not found" failures (see Failure mode below).
+
+**TOML schema** — minimum required: `[meta]` block with `name`, plus at least one `[variants.<tag>]` table with a `prompt` field. The default variant is `"normal"` unless `[variants].default` says otherwise. Variant tags must match what slides reference via `"style": "cover"` / `"normal"` / etc.
+
+**Annotated example** (the `nb-pro` schema, trimmed):
+
+```toml
+[meta]
+name = "puer-woodcut"                       # MUST match the filename stem
+display_name = "Pu'er Woodcut"              # Shown by mofa_list_styles
+description = "Hand-carved woodblock prints, earth tones, tea-leaf motifs"
+category = "artistic"                        # Free-form, used for grouping
+tags = ["tea", "woodcut", "earthy"]          # Free-form
+
+[variants]
+default = "normal"                           # Variant to use when slide omits `style`
+
+[variants.normal]                            # Required: at least one variant
+prompt = """
+Create a presentation slide image. 1920×1080 pixels, 16:9 landscape format.
+
+DESIGN SYSTEM (follow precisely):
+- BACKGROUND: <describe the canvas>
+- TYPOGRAPHY: <fonts, colors, sizes>
+- ILLUSTRATION: <art style, motifs>
+- LAYOUT: <where text goes, where decorations go>
+- MOOD: <one sentence of feel>
+
+<Repeat the rules every built-in style follows: no page numbers, no leaked
+formatting hints, language-appropriate fonts/punctuation.>
+"""
+
+# Optional extra variants — slides reference these via `"style": "cover"` etc.
+# [variants.cover]
+# prompt = """ ... cover-page composition ... """
+#
+# [variants.data]
+# prompt = """ ... data-dense composition ... """
+```
+
+Look at `mofa-slides/styles/nb-pro.toml` (minimal, one variant) or `fengzikai.toml` / `lingnan.toml` (multi-variant, artistic) for full real-world references before authoring.
+
+**Workflow:**
+
+1. `write_file` to `<workspace>/styles/<style-name>.toml` with the TOML above, filling in the design system in the deck's primary language.
+2. (Optional) `read_file` to verify the TOML parsed cleanly. The pre-flight validator only checks file existence, not TOML validity — a malformed file fails inside the spawned plugin.
+3. Call `mofa_slides({ style: "<style-name>", input: "slides/<slug>/script.js", out: ..., slide_dir: ... })`. The binary picks up the workspace TOML automatically — workspace styles win over built-ins.
+
+**Failure mode — "style not found":**
+- Most common cause: the TOML lives at `<workspace>/skill-output/styles/<name>.toml` (wrong) instead of `<workspace>/styles/<name>.toml` (correct). Move the file up one directory and re-call.
+- Second cause: filename stem doesn't match the `style` arg (e.g. file `puer_woodcut.toml`, arg `puer-woodcut`). Rename the file or change the arg so they match exactly.
+- Third cause: the `style` value contains a path separator or `.toml` suffix. Use a bare basename: `style: "puer-woodcut"`, not `style: "styles/puer-woodcut.toml"`.
 
 ## Built-in Styles
 
