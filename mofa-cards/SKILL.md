@@ -1,6 +1,6 @@
 ---
 name: mofa-cards
-version: 0.4.2
+version: 0.4.5
 description: "AI-generated greeting cards as PNG images. Triggers: greeting card, 贺卡, mofa card, mofa 贺卡, make a card, CNY card, New Year card, 新年贺卡, ink-wash card. Generates full-bleed AI artwork via Gemini in various Chinese art styles."
 requires_bins: mofa
 requires_env: GEMINI_API_KEY
@@ -8,124 +8,58 @@ requires_env: GEMINI_API_KEY
 
 # mofa-cards
 
-CLI: `mofa cards`
-Styles: `mofa-cards/styles/*.toml`
-Config: `mofa/config.json`
+Generate AI-powered greeting / holiday cards as PNG images (full-bleed Gemini
+artwork in 8 Chinese art styles plus inline custom prompts).
 
-## Output Paths
+- CLI: `mofa cards`
+- Styles: `styles/*.toml` (8 built-in + 7 t-shirt variants)
+- Config: `mofa/config.json`
 
-**IMPORTANT**: Always use relative paths under `skill-output/` with a unique per-request subdirectory:
+The `mofa_cards` tool is **spawn_only** — generation runs in the background and
+images are delivered when ready. Do NOT wait inside the agent loop.
+
+## Load-bearing rules (do NOT skip)
+
+### 1. Output paths
+
+**ALWAYS** use a relative path under `skill-output/` with a unique per-request
+subdirectory:
 
 ```
 skill-output/mofa-cards-<YYYYMMDD-HHMMSS>/
 ```
 
-**Never use absolute paths like `/tmp/cards/`** — use relative paths instead.
+**NEVER** use absolute paths like `/tmp/cards/` or `/Users/.../Desktop/`. The
+session scope rejects writes outside `skill-output/`.
 
-## Interaction Guide
+### 2. API key
 
-Before generating, gather preferences interactively. On Telegram, use inline keyboard buttons:
+Verify `GEMINI_API_KEY` is set before calling the tool. If unset, ask the user
+to export it — the tool will fail otherwise.
 
-1. **Occasion** — What is the card for? (New Year, birthday, thank you, etc.)
-2. **Style** — Recommend based on occasion:
-   - Chinese New Year → `cny-guochao` (festive) or `cny-shuimo` (elegant)
-   - Tea culture / warm art → `feng-zikai`
-   - Folk wisdom / humor → `laoshu`
-   - Heritage / botanical → `lingnan`
-   - Buddhist / healing → `xianer`
-   - Modern / web → `web`
-3. **Number of cards** — Typically 1-3 (front, greeting, scene)
-4. **Aspect ratio** — Portrait `9:16` (default), square `1:1`, landscape `16:9`
-5. **API key** — Check if GEMINI_API_KEY is configured. If not, ask the user to provide it.
+### 3. Style selection is interactive
 
-**Telegram inline keyboard example:**
-```json
-message(content="Choose a card style:", metadata={"inline_keyboard": [
-  [{"text": "国潮 cny-guochao", "callback_data": "style:cny-guochao"}, {"text": "水墨 cny-shuimo", "callback_data": "style:cny-shuimo"}],
-  [{"text": "丰子恺 feng-zikai", "callback_data": "style:feng-zikai"}, {"text": "岭南 lingnan", "callback_data": "style:lingnan"}]
-]})
-```
-User's button press arrives as `[callback] style:cny-guochao`.
+Before generating, gather: occasion, style, card count (typically 1-3), aspect
+ratio (default `9:16`). On Telegram, use an inline keyboard for style picks.
+Recommend a style based on occasion — see `docs/styles.md`.
 
-## Quick Start
+### 4. Inline custom styles are supported
 
-```bash
-echo '[
-  {"name": "front", "style": "front", "prompt": "新春大吉! A dragon soaring through golden clouds, red lanterns below."},
-  {"name": "greeting", "style": "greeting", "prompt": "恭贺新禧\n万事如意 阖家欢乐"},
-  {"name": "scene", "style": "scene", "prompt": "Family reunion dinner scene, round table with festive dishes"}
-]' | mofa cards --style cny-guochao --card-dir cards-output
-```
+You are NOT limited to built-in styles. Write a full style description directly
+in the card's `prompt` field; pick any built-in `--style` as a layout base. See
+`docs/styles.md` for trigger-phrase → snippet recipes.
 
-## Custom Styles (inline)
+### 5. Timeouts preserve cache
 
-You are NOT limited to the built-in styles. Write a full style prompt directly in the card's `prompt` field. Use any built-in style as `--style` base.
+Each card is ~15-30s; tool timeout is 600s. **If generation times out, cached
+cards are preserved** — rerun and only missing cards regenerate. See
+`docs/examples.md` for the timing table.
 
-| User says | Prompt snippet |
-|-----------|---------------|
-| Art Deco、复古金色 | `Deep navy (#1B1F3B), gold (#D4AF37) geometric sunburst, chevrons, fan shapes. 1920s luxury.` |
-| 国潮、Chinese guochao | `Deep red (#8B0000), gold (#D4AF37) traditional patterns — clouds, waves, dragons. Bold, vibrant.` |
-| 水墨、ink wash | `Rice paper texture (#F5F0E8). Black ink wash flowing strokes, mountains, bamboo. Red seal accent.` |
-| 敦煌、Dunhuang | `Sand (#C9A96E), terracotta (#B7623E), turquoise (#2E8B8B), gold. Flying apsaras, flame motifs.` |
-| 青花瓷、Blue porcelain | `White (#FAFAFA). Cobalt blue (#1A3C6D) delicate floral patterns — peonies, lotus, vine scrolls.` |
-| 日式和风 | `Soft cream (#F5F0E1), indigo (#2C3E6B). Cherry blossoms, wave patterns, torii gates. Wabi-sabi.` |
-| Retro 80s | `Dark purple gradient. Neon grid, chrome text, sunset gradients (pink→orange→purple). Synthwave.` |
-| Watercolor | `Soft wet-on-wet watercolor washes. Bleeding edges, organic color mixing. Delicate and dreamy.` |
+## Where to look next
 
-## 8 Built-in Styles
-
-| Style | Theme | Best For |
-|-------|-------|----------|
-| `cny-guochao` | 国潮 red+gold, bold graphic | Chinese New Year (festive) |
-| `cny-shuimo` | 水墨 ink-wash, rice paper | Chinese New Year (elegant) |
-| `feng-zikai` | 丰子恺 minimal brush strokes | Tea culture, warm art |
-| `laoshu` | 老吴画画 ink figure + folk poetry | Folk wisdom, humor |
-| `lingnan` | 岭南画派 botanical ink-wash | Tea camps, heritage |
-| `shuimo` | 水墨 traditional ink-wash slides | Chinese painting |
-| `web` | Clean modern photography | Website hero/section images |
-| `xianer` | 贤二漫画 cute little monk | Buddhist style, healing |
-
-## Input JSON
-
-```json
-[
-  { "name": "front", "style": "front", "prompt": "..." },
-  { "name": "greeting", "style": "greeting", "prompt": "..." }
-]
-```
-
-Each card: `{ name, prompt, style? }`. Style is the variant within the TOML file (e.g. "front", "greeting", "scene").
-
-## CLI Flags
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--style` | `cny-guochao` | Style name (from styles/*.toml) |
-| `--card-dir` | required | Output directory for PNGs |
-| `--aspect` | `9:16` | `"9:16"` / `"3:4"` / `"1:1"` / `"16:9"` |
-| `--concurrency` | 5 | Parallel workers |
-| `--image-size` | - | `"1K"` / `"2K"` / `"4K"` |
-| `--api` | `rt` | API mode: `rt` (realtime, fast parallel) or `batch` (50% cheaper, async 5-30 min) |
-| `-i` / `--input` | stdin | Input JSON file |
-
-## Timing & Timeouts
-
-Each card takes ~15-30 seconds to generate. Total time depends on card count and concurrency:
-
-| Cards | Concurrency | Estimated Time |
-|-------|-------------|----------------|
-| 1-3 | 5 | ~15-30s |
-| 5 | 5 | ~30-60s |
-| 10 | 5 | ~2-3 min |
-
-**Tool timeout is 600 seconds (10 min).** Cards are fast — timeouts are unlikely unless generating many cards at high resolution.
-
-If a generation times out, **cached cards are preserved** — rerun and only missing cards will be regenerated.
-
-## Config
-
-`mofa/config.json`:
-
-**API keys**: `"env:GEMINI_API_KEY"` — set via `export GEMINI_API_KEY="your-key"`
-**Models**: `gen_model` (image gen).
-**Defaults**: `defaults.cards.*`: `style`, `aspect_ratio`, `image_size`.
+- Built-in style catalog + occasion mapping + inline custom-style recipes →
+  `docs/styles.md`
+- Quick-start CLI snippet + input JSON shape + Telegram inline-keyboard example
+  + timing table → `docs/examples.md`
+- Full CLI flag reference + `mofa/config.json` keys → `docs/cli-flags.md`
+- Enumerate available styles directly → list `styles/*.toml`
