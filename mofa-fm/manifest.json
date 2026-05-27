@@ -1,8 +1,18 @@
 {
   "name": "mofa-fm",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "author": "hagency",
   "description": "Voice management and TTS with custom voice cloning via ominix-api",
+  "skill_md_auto_inject": false,
+  "discovery": {
+    "summary": "TTS and voice cloning via local ominix-api (preset + custom voices, background-spawning).",
+    "hints": [
+      { "when": "fm_tts or podcast_generate returns Unknown voice / Voice not found / unavailable-voice error", "read": "SKILL.md" },
+      { "when": "user explicitly asks to list, browse, or inspect available voices", "read": "docs/full-guide.md" },
+      { "when": "picking a style prompt (news, storytelling, emotion) or crafting a voice tone override", "read": "docs/full-guide.md" },
+      { "when": "saving a new custom voice with fm_voice_save (clip format, naming, where files land)", "read": "docs/full-guide.md" }
+    ]
+  },
   "timeout_secs": 1800,
   "requires_network": true,
   "requires": {
