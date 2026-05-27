@@ -1,6 +1,6 @@
 {
   "name": "mofa-publish",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "hagency",
   "description": "Deploy a built static site to GitHub Pages or Mac Mini hosting and verify the live URL.",
   "timeout_secs": 600,
@@ -12,6 +12,44 @@
       "curl",
       "ssh",
       "scp"
+    ]
+  },
+  "skill_md_auto_inject": false,
+  "discovery": {
+    "summary": "Publishes a built static site to GitHub Pages or a Mac Mini and verifies the live URL.",
+    "hints": [
+      {
+        "when": "user wants to deploy to GitHub Pages or asks about `gh-pages` / `.nojekyll`",
+        "read": "docs/github-pages.md"
+      },
+      {
+        "when": "user wants to deploy to a Mac Mini (mini1/mini3) or asks about the public Mini URL",
+        "read": "docs/mini.md"
+      },
+      {
+        "when": "SSH auth fails or user needs `--ssh-key` / `--ssh-password-env` / non-22 port flags",
+        "read": "docs/mini.md"
+      },
+      {
+        "when": "user wants CI auto-deploy on push (`setup_ci`) or a custom domain (CNAME)",
+        "read": "docs/github-pages.md"
+      },
+      {
+        "when": "site is a dynamic Node app (not a static export) and needs a reverse proxy on Mini",
+        "read": "docs/dynamic-apps.md"
+      },
+      {
+        "when": "user wants a sample Caddy reverse-proxy block for `/sites/<slug>/` or a dedicated subdomain",
+        "read": "examples/Caddyfile.proxy.example"
+      },
+      {
+        "when": "user is unsure which framework output dir to point at (Quarto/Astro/Next/plain HTML)",
+        "read": "docs/site-detection.md"
+      },
+      {
+        "when": "user wants the dual-deploy (public GitHub + private Mini) pattern or pipeline-stage overview",
+        "read": "docs/site-detection.md"
+      }
     ]
   },
   "tools": [
