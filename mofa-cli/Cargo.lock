@@ -1197,7 +1197,7 @@ dependencies = [
 
 [[package]]
 name = "mofa"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64",
  "chrono",
@@ -1211,6 +1211,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "signal-hook",
+ "tempfile",
  "toml",
  "walkdir",
  "zip",
