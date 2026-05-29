@@ -49,6 +49,19 @@ fn update_path_fingerprint(hasher: &mut Sha256, path: &Path) {
     }
 }
 
+/// Hash a file's CONTENT (bytes), not its path/metadata. Used by
+/// `edit_fingerprint` so an edit keyed on a source image is position- AND
+/// mtime-independent: an unchanged image restored from the content store (with
+/// a fresh mtime) at a new positional slot still yields the same fingerprint,
+/// so the expensive edit (Qwen/Gemini text removal) is reused rather than
+/// rerun. Falls back to a marker on read failure.
+fn update_content_fingerprint(hasher: &mut Sha256, path: &Path) {
+    match std::fs::read(path) {
+        Ok(bytes) => hasher.update(&bytes),
+        Err(_) => hasher.update(b"missing-content"),
+    }
+}
+
 fn hash_to_hex(hasher: Sha256) -> String {
     let bytes = hasher.finalize();
     let mut out = String::with_capacity(bytes.len() * 2);
@@ -81,7 +94,9 @@ fn generation_fingerprint(
 fn edit_fingerprint(source_image: &Path, prompt: &str, model: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"kind=edit\n");
-    update_path_fingerprint(&mut hasher, source_image);
+    // Content-hash the source image (not its path/mtime) so the edit cache is
+    // position-independent — see `update_content_fingerprint`.
+    update_content_fingerprint(&mut hasher, source_image);
     hasher.update(b"\nprompt=");
     hasher.update(prompt.as_bytes());
     hasher.update(b"\nmodel=");
@@ -127,6 +142,94 @@ fn has_valid_cache(out_file: &Path, fingerprint: &str) -> bool {
             .unwrap_or(false)
 }
 
+// ── Content-addressed image store ──────────────────────────────────────────
+//
+// Slide images are written to positional paths (`slide-01.png`, …) because
+// the PPTX assembler indexes by page order. But position is the wrong cache
+// key: when a deck is re-rendered after pages are added / deleted / reordered,
+// an unchanged slide lands at a new position, the positional cache misses, and
+// the image is regenerated (wasteful) while the old image is orphaned — and a
+// slide's image can end up keyed to the wrong page number.
+//
+// The store below keys each generated image by its CONTENT fingerprint (which
+// is already computed for cache validation), so an unchanged slide reuses its
+// image at ANY position. The positional file the assembler expects is then
+// materialized from the store. This is what makes add / delete / replace cheap
+// and correct: only genuinely changed slides regenerate, and page↔image can't
+// desync. The store lives next to the outputs so it persists across renders of
+// the same deck.
+
+/// Content-addressed cache directory next to the positional outputs.
+/// Best-effort: `None` if the parent can't be resolved or created.
+fn content_store_dir(out_file: &Path) -> Option<PathBuf> {
+    let dir = out_file.parent()?.join(".image-cache");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir)
+}
+
+/// Path of the content-addressed copy for `fingerprint`, preserving the
+/// positional file's extension.
+fn content_store_path(out_file: &Path, fingerprint: &str) -> Option<PathBuf> {
+    let ext = out_file
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png");
+    Some(content_store_dir(out_file)?.join(format!("{fingerprint}.{ext}")))
+}
+
+/// Copy a freshly-generated image into the content store so a later render can
+/// reuse it at any position. Best-effort, never fatal.
+///
+/// Publishes ATOMICALLY: copy to a unique temp, then rename into place. The
+/// parallel sync renderer can have two slides with the same fingerprint in
+/// flight at once; a bare `fs::copy` to the final path would let a concurrent
+/// `restore_from_content_store` read a partially-written (>10 KB but
+/// incomplete) file, and a failed copy would strand an invalid final entry
+/// that future saves skip via the `exists()` guard. Temp + rename avoids both.
+fn save_to_content_store(generated: &Path, fingerprint: &str, out_file: &Path) {
+    let Some(store) = content_store_path(out_file, fingerprint) else {
+        return;
+    };
+    if store.exists() {
+        return;
+    }
+    // Temp name keyed on the source basename so parallel writers (distinct
+    // positional files) never collide on the temp path.
+    let suffix = generated
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("img");
+    let tmp = store.with_file_name(format!("{fingerprint}.{suffix}.part"));
+    if std::fs::copy(generated, &tmp).is_ok() {
+        let _ = std::fs::rename(&tmp, &store);
+    } else {
+        let _ = std::fs::remove_file(&tmp);
+    }
+}
+
+/// Position-independent cache hit: if a content-addressed copy exists for
+/// `fingerprint`, materialize it into the positional `out_file` the assembler
+/// expects and return that path. Returns `None` (→ regenerate) when the
+/// content changed or nothing is stored yet.
+fn restore_from_content_store(out_file: &Path, fingerprint: &str) -> Option<PathBuf> {
+    let store = content_store_path(out_file, fingerprint)?;
+    if !cacheable_file_exists(&store) {
+        return None;
+    }
+    if store != out_file {
+        std::fs::copy(&store, out_file).ok()?;
+    }
+    let _ = write_cache_stamp(out_file, fingerprint);
+    Some(out_file.to_path_buf())
+}
+
+/// Record a successful generation: stamp the positional file AND copy it into
+/// the content-addressed store.
+fn finalize_generated(path: &Path, fingerprint: &str, out_file: &Path) {
+    let _ = write_cache_stamp(path, fingerprint);
+    save_to_content_store(path, fingerprint, out_file);
+}
+
 /// Route image generation to Gemini or Dashscope based on model name.
 /// Models starting with "qwen-image" go to Dashscope, everything else to Gemini.
 #[allow(clippy::too_many_arguments)]
@@ -142,10 +245,23 @@ fn generate_image(
     label: &str,
 ) -> Option<PathBuf> {
     let fingerprint = generation_fingerprint(prompt, image_size, model, ref_images);
+    // Positional cache FIRST (cheap, no copy): a valid same-position file is
+    // reused as-is. Checking the store first would recopy it and churn its
+    // mtime, which can invalidate a downstream `edit_fingerprint` for
+    // auto_layout slides (codex P2). Backfill the store so a future render at
+    // a different position can still reuse this image.
     invalidate_stale_cache(out_file, &fingerprint);
     if has_valid_cache(out_file, &fingerprint) {
+        save_to_content_store(out_file, &fingerprint, out_file);
         eprintln!("Cached: {label}");
         return Some(out_file.to_path_buf());
+    }
+    // Position-independent hit (on positional miss only): a slide that moved
+    // (pages added / deleted / reordered upstream) reuses its existing image
+    // at the new positional slot instead of regenerating.
+    if let Some(p) = restore_from_content_store(out_file, &fingerprint) {
+        eprintln!("Cached (content-addressed): {label}");
+        return Some(p);
     }
 
     if model.starts_with("gpt-image") {
@@ -162,7 +278,7 @@ fn generate_image(
                 .ok()
                 .flatten()
                 .inspect(|path| {
-                    let _ = write_cache_stamp(path, &fingerprint);
+                    finalize_generated(path, &fingerprint, out_file);
                 });
         }
         eprintln!("{label}: OpenAI client not configured for {model}");
@@ -173,7 +289,7 @@ fn generate_image(
         if let Some(ref ds) = dashscope {
             match ds.gen_image(prompt, out_file, Some(model), image_size) {
                 Ok(p) => {
-                    let _ = write_cache_stamp(&p, &fingerprint);
+                    finalize_generated(&p, &fingerprint, out_file);
                     return Some(p);
                 }
                 Err(e) => eprintln!("{label}: Dashscope gen failed ({e}), falling back to Gemini"),
@@ -195,7 +311,7 @@ fn generate_image(
         .ok()
         .flatten()
         .inspect(|path| {
-            let _ = write_cache_stamp(path, &fingerprint);
+            finalize_generated(path, &fingerprint, out_file);
         })
 }
 
@@ -564,7 +680,13 @@ pub fn run(
 
     // Batch mode: pre-generate all images via Batch API, then extract text sequentially
     if batch {
-        let mut batch_requests: Vec<(usize, BatchImageRequest, bool, String)> = Vec::new(); // (idx, req, is_auto_layout, fingerprint)
+        // (idx, req, is_auto_layout, fingerprint)
+        let mut batch_requests: Vec<(usize, BatchImageRequest, bool, String)> = Vec::new();
+        // Result vecs hoisted above the loop so cache/store hits (which skip
+        // the batch request entirely) can record their paths here alongside
+        // the generated results below.
+        let mut ref_paths_vec: Vec<Option<PathBuf>> = vec![None; total];
+        let mut direct_paths_vec: Vec<Option<PathBuf>> = vec![None; total];
 
         for (idx, slide) in slides.iter().enumerate() {
             let variant = slide.style.as_deref().unwrap_or("normal");
@@ -599,7 +721,18 @@ pub fn run(
                     &model_name,
                     &ref_images.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
                 );
+                // Cache/store hit → skip the batch request (position-independent
+                // reuse). Positional first (no copy), then content store.
                 invalidate_stale_cache(&out_file, &fingerprint);
+                if has_valid_cache(&out_file, &fingerprint) {
+                    save_to_content_store(&out_file, &fingerprint, &out_file);
+                    ref_paths_vec[idx] = Some(out_file);
+                    continue;
+                }
+                if let Some(p) = restore_from_content_store(&out_file, &fingerprint) {
+                    ref_paths_vec[idx] = Some(p);
+                    continue;
+                }
                 batch_requests.push((
                     idx,
                     BatchImageRequest {
@@ -626,7 +759,18 @@ pub fn run(
                     &model_name,
                     &ref_images.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
                 );
+                // Cache/store hit → skip the batch request (position-independent
+                // reuse). Positional first (no copy), then content store.
                 invalidate_stale_cache(&out_file, &fingerprint);
+                if has_valid_cache(&out_file, &fingerprint) {
+                    save_to_content_store(&out_file, &fingerprint, &out_file);
+                    direct_paths_vec[idx] = Some(out_file);
+                    continue;
+                }
+                if let Some(p) = restore_from_content_store(&out_file, &fingerprint) {
+                    direct_paths_vec[idx] = Some(p);
+                    continue;
+                }
                 batch_requests.push((
                     idx,
                     BatchImageRequest {
@@ -681,13 +825,12 @@ pub fn run(
             }
         };
 
-        // Map batch results back
-        let mut ref_paths_vec: Vec<Option<PathBuf>> = vec![None; total];
-        let mut direct_paths_vec: Vec<Option<PathBuf>> = vec![None; total];
-
+        // Map batch results back into the (already cache-populated) vecs.
         for (result_idx, (slide_idx, is_auto, fingerprint)) in indices.iter().enumerate() {
             if let Some(path) = batch_results.get(result_idx).and_then(|r| r.as_ref()) {
-                let _ = write_cache_stamp(path, fingerprint);
+                // Stamp the positional file AND save to the content store so a
+                // later reorder reuses it (parity with `generate_image`).
+                finalize_generated(path, fingerprint, path);
                 if *is_auto {
                     ref_paths_vec[*slide_idx] = Some(path.to_path_buf());
                 } else {
@@ -783,8 +926,18 @@ pub fn run(
             );
             invalidate_stale_cache(&out_path, &cache_fingerprint);
             if has_valid_cache(&out_path, &cache_fingerprint) {
+                save_to_content_store(&out_path, &cache_fingerprint, &out_path);
                 eprintln!("Cached: Slide {}", idx + 1);
                 final_paths[idx] = Some(out_path);
+                continue;
+            }
+            // Position-independent edit reuse: the edited output is keyed by the
+            // (content-based) edit fingerprint, so an unchanged auto_layout
+            // slide that moved restores its edited image instead of re-running
+            // the expensive text-removal edit.
+            if let Some(p) = restore_from_content_store(&out_path, &cache_fingerprint) {
+                eprintln!("Cached (content-addressed): Slide {}", idx + 1);
+                final_paths[idx] = Some(p);
                 continue;
             }
 
@@ -798,7 +951,7 @@ pub fn run(
                     Some(cfg.edit_model()),
                 ) {
                     Ok(p) => {
-                        let _ = write_cache_stamp(&p, &cache_fingerprint);
+                        finalize_generated(&p, &cache_fingerprint, &out_path);
                         final_paths[idx] = Some(p);
                     }
                     Err(e) => eprintln!("Slide {}: Qwen-Edit failed ({e})", idx + 1),
@@ -1078,8 +1231,15 @@ pub fn run(
         let cache_fingerprint = edit_fingerprint(ref_path, text_removal_prompt, &edit_model);
         invalidate_stale_cache(&out_path, &cache_fingerprint);
         if has_valid_cache(&out_path, &cache_fingerprint) {
+            save_to_content_store(&out_path, &cache_fingerprint, &out_path);
             eprintln!("Cached: Slide {}", idx + 1);
             final_paths[idx] = Some(out_path);
+            continue;
+        }
+        // Position-independent edit reuse (see the batch edit phase above).
+        if let Some(p) = restore_from_content_store(&out_path, &cache_fingerprint) {
+            eprintln!("Cached (content-addressed): Slide {}", idx + 1);
+            final_paths[idx] = Some(p);
             continue;
         }
 
@@ -1114,7 +1274,7 @@ pub fn run(
                 .flatten()
         });
         if let Some(p) = removed {
-            let _ = write_cache_stamp(&p, &cache_fingerprint);
+            finalize_generated(&p, &cache_fingerprint, &out_path);
             final_paths[idx] = Some(p);
         }
     }
@@ -1152,4 +1312,62 @@ pub fn run(
         out_file = out_file.display()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod content_store_tests {
+    use super::*;
+    use std::io::Write;
+
+    /// Write a "valid" image file (`cacheable_file_exists` requires > 10 KB).
+    fn write_img(path: &Path, marker: &[u8]) {
+        let mut f = std::fs::File::create(path).unwrap();
+        f.write_all(marker).unwrap();
+        f.write_all(&vec![0u8; 11_000]).unwrap();
+    }
+
+    /// The core add/delete/replace guarantee: an unchanged slide reuses its
+    /// image when its PAGE POSITION changes, instead of regenerating.
+    #[test]
+    fn reuses_image_across_position_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let imgs = dir.path();
+        let fp = "deadbeefcafef00d";
+
+        // Render 1: this content lived at page 3.
+        let s3 = imgs.join("slide-03.png");
+        write_img(&s3, b"PAGE3");
+        finalize_generated(&s3, fp, &s3); // stamps + stores by fingerprint
+
+        // Render 2: an earlier page was deleted, so the SAME content is now at
+        // page 2. It must be restored from the content store (no regen) and
+        // materialized into the slide-02.png slot the assembler expects.
+        let s2 = imgs.join("slide-02.png");
+        assert!(!s2.exists());
+        let restored = restore_from_content_store(&s2, fp);
+        assert!(
+            restored.is_some(),
+            "unchanged slide must restore across a position change"
+        );
+        assert!(s2.exists(), "image must land in the new positional slot");
+        let body = std::fs::read(&s2).unwrap();
+        assert_eq!(
+            &body[..5],
+            b"PAGE3",
+            "must reuse the original bytes, not a fresh render"
+        );
+    }
+
+    /// A replaced slide has a NEW fingerprint => store miss => regenerate.
+    #[test]
+    fn miss_on_changed_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let s1 = dir.path().join("slide-01.png");
+        write_img(&s1, b"OLD");
+        finalize_generated(&s1, "fp-old", &s1);
+        assert!(
+            restore_from_content_store(&dir.path().join("slide-01.png"), "fp-new").is_none(),
+            "changed content must not restore (must regenerate)"
+        );
+    }
 }
