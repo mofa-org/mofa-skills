@@ -15,9 +15,45 @@ After writing the script, invoke `mofa_slides` with `input: "<path-to-script.js>
 - Write `script.js` to the workspace first with the `write_file` tool — do NOT pass an inline `slides: [...]` array to `mofa_slides`. Always invoke with `input: "<workspace-relative path to script.js>"` after the file is on disk.
 - `const VQA` lives at the TOP of the script, in the deck's primary language. Splice `${VQA}` at the END of EVERY `slides[i].prompt`.
 - Each `slides[i].prompt` MUST quote the exact text Gemini should render: `主标题(粗体):"具体中文标题"` or `Title (bold): "The Exact English Title"`. Never free-form like `"a title saying something about tea"` — Gemini will hallucinate filler.
-- Language match end-to-end: if the user writes Chinese, VQA + slide narratives + quoted text-to-render are ALL Chinese. If English, all English. NO mixing.
+- Language match end-to-end: **the prompt body's instructional words must match the content language.** If the deck is Chinese, write `主标题(粗体)`, `副标题`, `卡片`, `底部洞察条` — NOT `VISUAL:`, `TITLE:`, `Elements:`, `TEXT:`. If the deck is English, the inverse. Mixing English instructional headers with Chinese quoted content is the #1 cause of 乱码 (garbled Chinese strokes) in Gemini output — see anti-pattern below.
+- For Chinese decks, prefer `image_size: "4K"` (3840×2160). Chinese glyphs need stroke density that 2K (1920×1080) does not give; at 2K Gemini renders the right shape but hallucinates wrong characters, which reads as 乱码.
 - Use `module.exports = [ ... ]` to surface the array. Do NOT `require("./lib/engine")` or call `run({...})` — that's cc-ppt's shape; mofa-slides' Rust binary owns the engine.
 - Inline `slides: [...]` argument is **deprecated**. Always prefer writing a script file and passing `input: "<path>"`. Reasons: script lives in workspace for user iteration; per-deck `const VQA` keeps language matching honest; `${VQA}` splicing is awkward inside inline JSON.
+
+## Anti-pattern — what causes 乱码 in Chinese decks
+
+These two prompts ask Gemini to render the same Chinese title. Only the first works.
+
+**❌ WRONG — English-template instructions with Chinese content (produces 乱码):**
+
+```js
+{
+  style: "cover",
+  prompt: `VISUAL: Ancient tea tree silhouette against misty Yunnan mountains
+TITLE: 普洱茶
+SUBTITLE: 千年茶魂
+Elements: Wood grain border, tea leaves falling, amber and forest green tones`,
+}
+```
+
+Why this fails: Gemini's image-text renderer reads the dominant prompt language (English here) and allocates its CJK glyph budget accordingly. When it reaches `普洱茶` it produces strokes that *look* like Chinese but are often invented characters or near-miss substitutions. The image-resolution default of 2K compounds the problem — there aren't enough pixels per stroke to disambiguate.
+
+**✅ RIGHT — Chinese-template instructions with quoted Chinese content:**
+
+```js
+{
+  style: "cover",
+  prompt: `封面页。
+主标题(很大粗体暖炭灰,居中):"普洱茶"
+副标题(雾金,居中,紧贴主标题下方):"千年茶魂"
+概念插图:一棵古茶树剪影,云南雾峰为背景,木纹边框,落叶随风,琥珀与森林绿色调。
+绝对不要版本号、日期、URL、页脚。${VQA}`,
+}
+```
+
+Why this works: every instructional word is Chinese, every quoted text-to-render is Chinese, and `${VQA}` interpolates the per-deck quality block one more time. Gemini stays in its Chinese rendering regime end-to-end.
+
+**The rule, plainly:** in a Chinese deck, the ONLY English allowed in `prompt` strings is established proper nouns (Linux, Gemini, OpenAI, Claude, MCP, etc.) — listed explicitly in the VQA exceptions clause. Everything else, including layout directives, color descriptions, and font instructions, is Chinese.
 
 ## Minimal inline example — Chinese deck
 
