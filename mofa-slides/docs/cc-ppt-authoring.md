@@ -15,8 +15,8 @@ After writing the script, invoke `mofa_slides` with `input: "<path-to-script.js>
 - Write `script.js` to the workspace first with the `write_file` tool — do NOT pass an inline `slides: [...]` array to `mofa_slides`. Always invoke with `input: "<workspace-relative path to script.js>"` after the file is on disk.
 - `const VQA` lives at the TOP of the script, in the deck's primary language. Splice `${VQA}` at the END of EVERY `slides[i].prompt`.
 - Each `slides[i].prompt` MUST quote the exact text Gemini should render: `主标题(粗体):"具体中文标题"` or `Title (bold): "The Exact English Title"`. Never free-form like `"a title saying something about tea"` — Gemini will hallucinate filler.
-- Language match end-to-end: **the prompt body's instructional words must match the content language.** If the deck is Chinese, write `主标题(粗体)`, `副标题`, `卡片`, `底部洞察条` — NOT `VISUAL:`, `TITLE:`, `Elements:`, `TEXT:`. If the deck is English, the inverse. Mixing English instructional headers with Chinese quoted content is the #1 cause of 乱码 (garbled Chinese strokes) in Gemini output — see anti-pattern below.
-- For Chinese decks, prefer `image_size: "4K"` (3840×2160). Chinese glyphs need stroke density that 2K (1920×1080) does not give; at 2K Gemini renders the right shape but hallucinates wrong characters, which reads as 乱码.
+- Language match — **applies to the prompt's instructional voice, NOT to the rendered content itself.** If the deck is Chinese, the words you use to instruct Gemini must be Chinese (`主标题(粗体)`, `副标题`, `卡片`, `底部洞察条`, `概念插图`), NOT English templates (`VISUAL:`, `TITLE:`, `Elements:`, `TEXT:`). The quoted text Gemini will render onto the image can mix as needed — a Chinese deck legitimately quotes English proper nouns, bilingual titles, code keywords, etc. Mixing English instructional templates with Chinese content is the #1 cause of 乱码 — see anti-pattern below.
+- `image_size: "4K"` (3840×2160) helps for Chinese decks but is NOT sufficient on its own — 乱码 reproduces at 4K when the prompt structure is English-dominant. The structural language rule above is the load-bearing one; 4K is supporting.
 - Use `module.exports = [ ... ]` to surface the array. Do NOT `require("./lib/engine")` or call `run({...})` — that's cc-ppt's shape; mofa-slides' Rust binary owns the engine.
 - Inline `slides: [...]` argument is **deprecated**. Always prefer writing a script file and passing `input: "<path>"`. Reasons: script lives in workspace for user iteration; per-deck `const VQA` keeps language matching honest; `${VQA}` splicing is awkward inside inline JSON.
 
@@ -36,7 +36,7 @@ Elements: Wood grain border, tea leaves falling, amber and forest green tones`,
 }
 ```
 
-Why this fails: Gemini's image-text renderer reads the dominant prompt language (English here) and allocates its CJK glyph budget accordingly. When it reaches `普洱茶` it produces strokes that *look* like Chinese but are often invented characters or near-miss substitutions. The image-resolution default of 2K compounds the problem — there aren't enough pixels per stroke to disambiguate.
+Why this fails: Gemini's image-text renderer reads the dominant prompt language (English here, because `VISUAL:` / `TITLE:` / `Elements:` outweigh the four Chinese characters by token count) and allocates its CJK glyph budget accordingly. When it reaches `普洱茶` it produces strokes that *look* like Chinese but are often invented characters or near-miss substitutions. Empirically this reproduces at `image_size: "4K"` too — bumping resolution doesn't save it. The structural-language signal is the load-bearing variable.
 
 **✅ RIGHT — Chinese-template instructions with quoted Chinese content:**
 
