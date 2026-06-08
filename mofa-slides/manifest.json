@@ -83,7 +83,7 @@
           },
           "out": {
             "type": "string",
-            "description": "Output PPTX file path. Use a relative path (e.g. slides.pptx) — never use /tmp."
+            "description": "Output PPTX file path. Must be a file path ending in .pptx (e.g. 'deck.pptx' or 'slides/my-deck/output/deck.pptx'), NOT a directory. Use a relative path — never use /tmp or absolute paths."
           },
           "slide_dir": {
             "type": "string",

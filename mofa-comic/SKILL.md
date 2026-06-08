@@ -36,14 +36,12 @@ If image generation fails with an auth error, it means the key is invalid or exp
 
 ### Output paths
 
-Always use relative paths under `skill-output/` with a unique per-request subdirectory:
+Use RELATIVE paths. Never prefix `skill-output/` yourself — the Octos host rebinds plugin output paths to `<workspace>/skill-output/` automatically; a manual prefix double-prefixes and breaks delivery. Never use absolute paths like `/tmp/comic.png`.
 
 ```
-skill-output/mofa-comic-<YYYYMMDD-HHMMSS>/comic.png
-skill-output/mofa-comic-<YYYYMMDD-HHMMSS>/panels/
+mofa-comic-<YYYYMMDD-HHMMSS>/comic.png
+mofa-comic-<YYYYMMDD-HHMMSS>/panels/
 ```
-
-**Never use absolute paths like `/tmp/comic.png`** — use relative paths instead.
 
 ## More
 

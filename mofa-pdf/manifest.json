@@ -1,0 +1,75 @@
+{
+  "name": "mofa-pdf",
+  "version": "0.4.1",
+  "description": "PDF manipulation toolkit: extract text/tables, create PDFs, merge/split, fill forms, convert PDF to Word/Markdown",
+  "skill_md_auto_inject": true,
+  "discovery": {
+    "summary": "Comprehensive PDF document processing — text/table extraction, PDF creation, merge/split, form filling, and PDF-to-Word conversion via Python scripts.",
+    "hints": [
+      { "when": "extracting text or tables from PDF, creating PDFs, merging/splitting, or general PDF processing", "read": "SKILL.md" },
+      { "when": "filling PDF forms or inspecting form fields", "read": "docs/forms.md" },
+      { "when": "converting PDF to Word (.docx) or Word to Markdown", "read": "docs/pdf_to_word_conversion_guide.md" },
+      { "when": "looking up advanced PDF features or JavaScript PDF libraries", "read": "docs/reference.md" }
+    ]
+  },
+  "tools": [
+    {
+      "name": "pdf_extract_text",
+      "description": "Extract text content from a PDF file using pdfplumber. Returns the full text of all pages. Use this for reading PDF documents, searching content, or preparing text for further processing.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pdf_path": {
+            "type": "string",
+            "description": "Path to the PDF file to extract text from"
+          },
+          "pages": {
+            "type": "string",
+            "description": "Page range to extract (e.g. '1-5', '1,3,5'). Defaults to all pages."
+          }
+        },
+        "required": ["pdf_path"]
+      }
+    },
+    {
+      "name": "pdf_extract_tables",
+      "description": "Extract tables from a PDF file using pdfplumber and export to Excel/CSV. Use this when the user needs tabular data from invoices, reports, or any structured PDF.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pdf_path": {
+            "type": "string",
+            "description": "Path to the PDF file containing tables"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save extracted tables (supports .xlsx, .csv, .json)"
+          },
+          "pages": {
+            "type": "string",
+            "description": "Page range to extract tables from (e.g. '1-5'). Defaults to all pages."
+          }
+        },
+        "required": ["pdf_path", "output_path"]
+      }
+    },
+    {
+      "name": "pdf_convert_to_word",
+      "description": "Convert a PDF file to Word (.docx) format. Uses pdf2docx for layout-preserving conversion. For scanned PDFs, OCR pre-processing is required first.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "pdf_path": {
+            "type": "string",
+            "description": "Path to the input PDF file"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path to save the output .docx file"
+          }
+        },
+        "required": ["pdf_path", "output_path"]
+      }
+    }
+  ]
+}

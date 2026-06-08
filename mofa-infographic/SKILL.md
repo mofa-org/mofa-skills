@@ -14,14 +14,14 @@ For LLM-facing discovery and routing, the manifest `discovery` card declares the
 
 ## Output paths (LOAD-BEARING)
 
-**ALWAYS use relative paths under `skill-output/` with a unique per-request subdirectory:**
+Use RELATIVE paths. Never prefix `skill-output/` yourself — the Octos host rebinds plugin output paths to `<workspace>/skill-output/` automatically; a manual prefix double-prefixes and breaks delivery. Never use absolute paths like `/tmp/poster.png`.
 
 ```
-skill-output/mofa-infographic-<YYYYMMDD-HHMMSS>/poster.png
-skill-output/mofa-infographic-<YYYYMMDD-HHMMSS>/sections/
+mofa-infographic-<YYYYMMDD-HHMMSS>/poster.png
+mofa-infographic-<YYYYMMDD-HHMMSS>/sections/
 ```
 
-**NEVER use absolute paths like `/tmp/poster.png`.** The `out` argument MUST be a relative path — the tool description repeats this. Absolute paths break the workspace contract and prevent the output from being delivered.
+The `out` argument MUST be a relative path — the tool description repeats this. Absolute paths break the workspace contract and prevent the output from being delivered.
 
 ## Built-in styles (4)
 
@@ -61,7 +61,7 @@ Full schema, prompt writing tips, and 4 worked examples (tech / business / edito
 ```
 
 ```bash
-mofa infographic --style clean-light --out skill-output/review.png -i sections.json
+mofa infographic --style clean-light --out review.png -i sections.json
 ```
 
 ## Run notes

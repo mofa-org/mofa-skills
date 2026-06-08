@@ -5,7 +5,7 @@
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--style`       | `cny-guochao` | Style name (from `styles/*.toml`) |
-| `--card-dir`    | required      | Output directory for PNGs (use a relative `skill-output/...` path) |
+| `--card-dir`    | required      | Output directory for PNGs (use a relative path — do NOT prefix `skill-output/`, the host adds it automatically) |
 | `--aspect`      | `9:16`        | `"9:16"` / `"3:4"` / `"1:1"` / `"16:9"` |
 | `--concurrency` | 5             | Parallel workers |
 | `--image-size`  | -             | `"1K"` / `"2K"` / `"4K"` |

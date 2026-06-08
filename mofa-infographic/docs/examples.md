@@ -12,7 +12,7 @@
 ```
 
 ```bash
-mofa infographic --style cyberpunk-neon --out skill-output/ai-poster.png -i tech.json
+mofa infographic --style cyberpunk-neon --out ai-poster.png -i tech.json
 ```
 
 ## Business report (5 sections)
@@ -28,7 +28,7 @@ mofa infographic --style cyberpunk-neon --out skill-output/ai-poster.png -i tech
 ```
 
 ```bash
-mofa infographic --style clean-light --out skill-output/review.png --image-size 2K -i report.json
+mofa infographic --style clean-light --out review.png --image-size 2K -i report.json
 ```
 
 ## Magazine editorial (3 sections with refinement)
@@ -42,13 +42,13 @@ mofa infographic --style clean-light --out skill-output/review.png --image-size 
 ```
 
 ```bash
-mofa infographic --style editorial --out skill-output/remote-work.png --refine --image-size 4K -i editorial.json
+mofa infographic --style editorial --out remote-work.png --refine --image-size 4K -i editorial.json
 ```
 
 ## Batch API for large infographic
 
 ```bash
-mofa infographic --style multi-panel --api batch --out skill-output/mega-poster.png -i 10-sections.json
+mofa infographic --style multi-panel --api batch --out mega-poster.png -i 10-sections.json
 ```
 
 ## Prompt writing tips
