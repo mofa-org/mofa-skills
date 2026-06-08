@@ -22,15 +22,14 @@ images are delivered when ready. Do NOT wait inside the agent loop.
 
 ### 1. Output paths
 
-**ALWAYS** use a relative path under `skill-output/` with a unique per-request
-subdirectory:
+Use RELATIVE paths. Never prefix `skill-output/` yourself — the Octos host
+rebinds plugin output paths to `<workspace>/skill-output/` automatically; a
+manual prefix double-prefixes and breaks delivery. Never use absolute paths
+like `/tmp/cards/` or `/Users/.../Desktop/`.
 
 ```
-skill-output/mofa-cards-<YYYYMMDD-HHMMSS>/
+mofa-cards-<YYYYMMDD-HHMMSS>/
 ```
-
-**NEVER** use absolute paths like `/tmp/cards/` or `/Users/.../Desktop/`. The
-session scope rejects writes outside `skill-output/`.
 
 ### 2. API key
 
