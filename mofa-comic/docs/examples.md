@@ -11,7 +11,7 @@
 ```
 
 ```bash
-mofa comic --style xkcd --out skill-output/bugs.png --layout horizontal -i panels.json
+mofa comic --style xkcd --out bugs.png --layout horizontal -i panels.json
 ```
 
 ## Manga with refinement
@@ -25,5 +25,5 @@ mofa comic --style xkcd --out skill-output/bugs.png --layout horizontal -i panel
 ```
 
 ```bash
-mofa comic --style manga --out skill-output/samurai.png --layout vertical --refine --image-size 2K -i manga.json
+mofa comic --style manga --out samurai.png --layout vertical --refine --image-size 2K -i manga.json
 ```
