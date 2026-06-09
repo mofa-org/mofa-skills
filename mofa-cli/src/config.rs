@@ -16,12 +16,29 @@ pub struct MofaConfig {
     pub gen_model: Option<String>,
     pub vision_model: Option<String>,
     pub edit_model: Option<String>,
+    /// Optional Google Cloud Vertex AI configuration for Gemini calls.
+    pub vertex: Option<VertexConfig>,
     /// OCR endpoint URL for grounded text extraction (e.g. "http://localhost:8080/v1/ocr").
     /// When set, auto-layout uses OCR+VQA mode (precise bounding boxes from OCR + font styling from VQA).
     /// When absent, falls back to VQA-only mode.
     pub ocr_url: Option<String>,
     /// Legacy alias for ocr_url.
     pub deepseek_ocr_url: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Default)]
+pub struct VertexConfig {
+    /// Service account JSON file path, raw JSON, or env indirection such as
+    /// "env:GOOGLE_APPLICATION_CREDENTIALS".
+    pub service_account_json: Option<String>,
+    /// Alias for service_account_json when the value is specifically a path.
+    pub service_account_json_path: Option<String>,
+    /// Google Cloud project id. Defaults to the service account JSON project_id.
+    pub project: Option<String>,
+    /// Vertex location. Defaults to us-central1.
+    pub location: Option<String>,
+    /// Optional full API base URL, for example https://us-central1-aiplatform.googleapis.com/v1.
+    pub base_url: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Default)]
