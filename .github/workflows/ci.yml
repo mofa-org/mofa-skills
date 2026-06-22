@@ -27,6 +27,10 @@ jobs:
             package: mofa-podcast
           - os: ubuntu-latest
             package: mofa-fm
+          - os: ubuntu-latest
+            package: mofa-site
+          - os: ubuntu-latest
+            package: mofa-publish
           - os: windows-latest
             package: mofa-cli
           - os: windows-latest

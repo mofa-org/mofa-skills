@@ -103,8 +103,110 @@ jobs:
           name: mofa-fm-${{ matrix.platform }}
           path: mofa-fm/dist/mofa-fm-${{ matrix.platform }}.tar.gz*
 
+  build-podcast:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            platform: darwin-aarch64
+            bin: mofa-podcast
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: mofa-podcast
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mofa-podcast
+          key: podcast-${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/mofa-podcast dist/main
+          cd dist && tar czf mofa-podcast-${{ matrix.platform }}.tar.gz main
+          shasum -a 256 mofa-podcast-${{ matrix.platform }}.tar.gz > mofa-podcast-${{ matrix.platform }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mofa-podcast-${{ matrix.platform }}
+          path: mofa-podcast/dist/mofa-podcast-${{ matrix.platform }}.tar.gz*
+
+  build-site:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            platform: darwin-aarch64
+            bin: mofa-site
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: mofa-site
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mofa-site
+          key: site-${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/mofa-site dist/main
+          cd dist && tar czf mofa-site-${{ matrix.platform }}.tar.gz main
+          shasum -a 256 mofa-site-${{ matrix.platform }}.tar.gz > mofa-site-${{ matrix.platform }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mofa-site-${{ matrix.platform }}
+          path: mofa-site/dist/mofa-site-${{ matrix.platform }}.tar.gz*
+
+  build-publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            platform: darwin-aarch64
+            bin: mofa-publish
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: mofa-publish
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: mofa-publish
+          key: publish-${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/mofa-publish dist/main
+          cd dist && tar czf mofa-publish-${{ matrix.platform }}.tar.gz main
+          shasum -a 256 mofa-publish-${{ matrix.platform }}.tar.gz > mofa-publish-${{ matrix.platform }}.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mofa-publish-${{ matrix.platform }}
+          path: mofa-publish/dist/mofa-publish-${{ matrix.platform }}.tar.gz*
+
   release:
-    needs: [build-cli, build-fm]
+    needs: [build-cli, build-fm, build-podcast, build-site, build-publish]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
