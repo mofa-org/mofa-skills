@@ -1,0 +1,13 @@
+[package]
+name = "mofa-site"
+version = "0.2.0"
+edition = "2021"
+description = "Build or scaffold websites from structured content (Quarto lessons + starter templates)"
+authors = ["hagency"]
+
+[[bin]]
+name = "mofa-site"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
