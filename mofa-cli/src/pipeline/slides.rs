@@ -632,10 +632,7 @@ pub fn run(
     _refine_with_qwen: bool,
     batch: bool,
 ) -> Result<()> {
-    let gemini_key = cfg
-        .gemini_key()
-        .ok_or_else(|| eyre::eyre!("Gemini API key required"))?;
-    let gemini = GeminiClient::new(gemini_key);
+    let gemini = GeminiClient::from_config(cfg)?;
 
     // Build OpenAI client for gpt-image models.
     let openai = match cfg.openai_key() {

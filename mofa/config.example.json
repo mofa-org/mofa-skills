@@ -3,6 +3,10 @@
     "gemini": "env:GEMINI_API_KEY",
     "dashscope": "env:DASHSCOPE_API_KEY"
   },
+  "vertex": {
+    "service_account_json": "env:GOOGLE_APPLICATION_CREDENTIALS",
+    "location": "global"
+  },
   "defaults": {
     "slides": { "style": "nb-pro", "image_size": "2K", "concurrency": 5, "auto_layout": true },
     "cards": { "style": "cny-guochao", "aspect_ratio": "9:16", "image_size": "2K" },

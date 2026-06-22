@@ -342,7 +342,10 @@ struct PluginOutput {
 
 impl From<String> for PluginOutput {
     fn from(text: String) -> Self {
-        Self { text, files: vec![] }
+        Self {
+            text,
+            files: vec![],
+        }
     }
 }
 
@@ -394,14 +397,16 @@ fn run_plugin(tool_name: &str, cancel: &std::sync::atomic::AtomicBool) -> Result
     let result: Result<(PluginOutput, serde_json::Value)> = match tool_name {
         "mofa_slides" => plugin_slides(&args, &mofa_root, &cfg, cancel).map(|(s, v)| (s.into(), v)),
         "mofa_cards" => plugin_cards(&args, &mofa_root, &cfg).map(|o| (o, serde_json::Value::Null)),
-        "mofa_comic" => plugin_comic(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null)),
+        "mofa_comic" => {
+            plugin_comic(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null))
+        }
         "mofa_infographic" => {
             plugin_infographic(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null))
         }
-        "mofa_video" => plugin_video(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null)),
-        "mofa_list_styles" => {
-            plugin_list_styles(&args, &mofa_root).map(|(s, v)| (s.into(), v))
+        "mofa_video" => {
+            plugin_video(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null))
         }
+        "mofa_list_styles" => plugin_list_styles(&args, &mofa_root).map(|(s, v)| (s.into(), v)),
         _ => Err(eyre::eyre!("unknown tool: {tool_name}")),
     };
 
@@ -749,7 +754,11 @@ fn plugin_cards(
         .collect();
 
     Ok(PluginOutput {
-        text: format!("Generated {} card(s) in {}", cards.len(), card_dir.display()),
+        text: format!(
+            "Generated {} card(s) in {}",
+            cards.len(),
+            card_dir.display()
+        ),
         files,
     })
 }
@@ -1597,10 +1606,7 @@ mod tests {
         let probed = workspace_style_probe_paths(&cwd, "sentinel.toml");
         assert_eq!(probed.len(), 2, "expected cwd + parent probe paths");
         assert_eq!(probed[0], cwd.join("styles").join("sentinel.toml"));
-        assert_eq!(
-            probed[1],
-            workspace.join("styles").join("sentinel.toml")
-        );
+        assert_eq!(probed[1], workspace.join("styles").join("sentinel.toml"));
 
         // Outside `skill-output`, only cwd is listed (parent is NOT
         // probed, so it must NOT appear in the diagnostic).
@@ -1608,9 +1614,6 @@ mod tests {
         fs::create_dir_all(&other).expect("mkdir output");
         let probed_other = workspace_style_probe_paths(&other, "sentinel.toml");
         assert_eq!(probed_other.len(), 1, "only cwd should be probed");
-        assert_eq!(
-            probed_other[0],
-            other.join("styles").join("sentinel.toml")
-        );
+        assert_eq!(probed_other[0], other.join("styles").join("sentinel.toml"));
     }
 }

@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use eyre::{Result, WrapErr};
+use crate::config::{resolve_key, MofaConfig};
+use eyre::{bail, Result, WrapErr};
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_GEN_MODEL: &str = "gemini-3.1-flash-image-preview";
 const CACHE_THRESHOLD: u64 = 10_000; // 10KB
@@ -103,12 +108,79 @@ fn extract_image_from_parts(parts: &[Value]) -> Option<Vec<u8>> {
 
 /// Default Gemini API base URL.
 const DEFAULT_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_VERTEX_LOCATION: &str = "us-central1";
+const GOOGLE_CLOUD_SCOPE: &str = "https://www.googleapis.com/auth/cloud-platform";
 
 /// Gemini API client for image generation and vision QA.
 pub struct GeminiClient {
-    api_key: String,
-    base_url: String,
+    auth: GeminiAuth,
     http: reqwest::blocking::Client,
+}
+
+enum GeminiAuth {
+    ApiKey {
+        api_key: String,
+        base_url: String,
+    },
+    Vertex {
+        service_account: ServiceAccountKey,
+        project: String,
+        location: String,
+        base_url: String,
+        token: Mutex<Option<CachedAccessToken>>,
+    },
+}
+
+#[derive(Deserialize)]
+struct ServiceAccountKey {
+    client_email: String,
+    private_key: String,
+    #[serde(default)]
+    project_id: Option<String>,
+    #[serde(default = "default_token_uri")]
+    token_uri: String,
+}
+
+struct CachedAccessToken {
+    token: String,
+    expires_at_epoch_secs: u64,
+}
+
+#[derive(Serialize)]
+struct ServiceAccountClaims<'a> {
+    iss: &'a str,
+    scope: &'a str,
+    aud: &'a str,
+    exp: u64,
+    iat: u64,
+}
+
+#[derive(Deserialize)]
+struct TokenResponse {
+    access_token: String,
+    expires_in: Option<u64>,
+}
+
+fn default_token_uri() -> String {
+    "https://oauth2.googleapis.com/token".to_string()
+}
+
+fn epoch_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_else(|_| Duration::from_secs(0))
+        .as_secs()
+}
+
+fn vertex_base_url(location: &str, override_base_url: Option<&str>) -> String {
+    if let Some(base_url) = override_base_url {
+        return base_url.trim_end_matches('/').to_string();
+    }
+    if location == "global" {
+        "https://aiplatform.googleapis.com/v1".to_string()
+    } else {
+        format!("https://{location}-aiplatform.googleapis.com/v1")
+    }
 }
 
 impl GeminiClient {
@@ -118,8 +190,7 @@ impl GeminiClient {
             .trim_end_matches('/')
             .to_string();
         Self {
-            api_key,
-            base_url,
+            auth: GeminiAuth::ApiKey { api_key, base_url },
             http: reqwest::blocking::Client::builder()
                 .timeout(std::time::Duration::from_secs(120))
                 .build()
@@ -127,10 +198,180 @@ impl GeminiClient {
         }
     }
 
+    pub fn from_config(cfg: &MofaConfig) -> Result<Self> {
+        if let Some(vertex) = &cfg.vertex {
+            let credentials_ref = vertex
+                .service_account_json
+                .as_deref()
+                .or(vertex.service_account_json_path.as_deref())
+                .and_then(resolve_key)
+                .or_else(|| std::env::var("GOOGLE_APPLICATION_CREDENTIALS").ok())
+                .ok_or_else(|| {
+                    eyre::eyre!(
+                        "vertex.service_account_json or GOOGLE_APPLICATION_CREDENTIALS required"
+                    )
+                })?;
+
+            let credentials = if credentials_ref.trim_start().starts_with('{') {
+                credentials_ref
+            } else {
+                std::fs::read_to_string(&credentials_ref).wrap_err_with(|| {
+                    format!("reading Vertex service account JSON: {credentials_ref}")
+                })?
+            };
+            let service_account: ServiceAccountKey = serde_json::from_str(&credentials)
+                .wrap_err("parsing Vertex service account JSON")?;
+            let project = vertex
+                .project
+                .clone()
+                .or_else(|| service_account.project_id.clone())
+                .ok_or_else(|| {
+                    eyre::eyre!(
+                        "vertex.project required when service account JSON has no project_id"
+                    )
+                })?;
+            let location = vertex
+                .location
+                .clone()
+                .unwrap_or_else(|| DEFAULT_VERTEX_LOCATION.to_string());
+            let base_url = vertex_base_url(&location, vertex.base_url.as_deref());
+
+            return Ok(Self {
+                auth: GeminiAuth::Vertex {
+                    service_account,
+                    project,
+                    location,
+                    base_url,
+                    token: Mutex::new(None),
+                },
+                http: reqwest::blocking::Client::builder()
+                    .timeout(std::time::Duration::from_secs(120))
+                    .build()
+                    .unwrap(),
+            });
+        }
+
+        let gemini_key = cfg
+            .gemini_key()
+            .ok_or_else(|| eyre::eyre!("Gemini API key required"))?;
+        Ok(Self::new(gemini_key))
+    }
+
     /// Sanitize error messages to avoid leaking API key.
     fn sanitize(&self, msg: &str) -> String {
-        let safe = msg.replace(&self.api_key, "[REDACTED]");
-        safe.chars().take(200).collect()
+        let safe = match &self.auth {
+            GeminiAuth::ApiKey { api_key, .. } => msg.replace(api_key, "[REDACTED]"),
+            GeminiAuth::Vertex {
+                service_account, ..
+            } => msg
+                .replace(&service_account.private_key, "[REDACTED]")
+                .replace(&service_account.client_email, "[SERVICE_ACCOUNT_EMAIL]"),
+        };
+        safe.chars().take(500).collect()
+    }
+
+    fn url_for_model_method(&self, model: &str, method: &str) -> String {
+        match &self.auth {
+            GeminiAuth::ApiKey { api_key, base_url } => {
+                format!("{base_url}/models/{model}:{method}?key={api_key}")
+            }
+            GeminiAuth::Vertex {
+                project,
+                location,
+                base_url,
+                ..
+            } => format!(
+                "{base_url}/projects/{project}/locations/{location}/publishers/google/models/{model}:{method}"
+            ),
+        }
+    }
+
+    fn batch_poll_url(&self, batch_name: &str) -> String {
+        match &self.auth {
+            GeminiAuth::ApiKey { api_key, base_url } => {
+                format!("{base_url}/{batch_name}?key={api_key}")
+            }
+            GeminiAuth::Vertex { base_url, .. } => format!("{base_url}/{batch_name}"),
+        }
+    }
+
+    fn access_token(&self) -> Result<String> {
+        let GeminiAuth::Vertex {
+            service_account,
+            token,
+            ..
+        } = &self.auth
+        else {
+            bail!("access_token called for non-Vertex auth");
+        };
+
+        let now = epoch_secs();
+        if let Some(cached) = token.lock().unwrap().as_ref() {
+            if cached.expires_at_epoch_secs > now + 120 {
+                return Ok(cached.token.clone());
+            }
+        }
+
+        let iat = now;
+        let exp = now + 3600;
+        let claims = ServiceAccountClaims {
+            iss: &service_account.client_email,
+            scope: GOOGLE_CLOUD_SCOPE,
+            aud: &service_account.token_uri,
+            exp,
+            iat,
+        };
+        let jwt = encode(
+            &Header::new(Algorithm::RS256),
+            &claims,
+            &EncodingKey::from_rsa_pem(service_account.private_key.as_bytes())
+                .wrap_err("loading service account private key")?,
+        )?;
+        let response = self
+            .http
+            .post(&service_account.token_uri)
+            .form(&[
+                ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
+                ("assertion", jwt.as_str()),
+            ])
+            .send()
+            .map_err(|e| eyre::eyre!("Vertex token request: {}", self.sanitize(&format!("{e}"))))?;
+        if !response.status().is_success() {
+            return Err(eyre::eyre!(
+                "Vertex token request failed: {}",
+                response.status()
+            ));
+        }
+        let token_response: TokenResponse = response.json()?;
+        let expires_at_epoch_secs = now + token_response.expires_in.unwrap_or(3600);
+        let access_token = token_response.access_token;
+        *token.lock().unwrap() = Some(CachedAccessToken {
+            token: access_token.clone(),
+            expires_at_epoch_secs,
+        });
+        Ok(access_token)
+    }
+
+    fn post_json(&self, url: &str, body: &Value) -> Result<reqwest::blocking::Response> {
+        let request = self.http.post(url).json(body);
+        let request = match &self.auth {
+            GeminiAuth::ApiKey { .. } => request,
+            GeminiAuth::Vertex { .. } => request.bearer_auth(self.access_token()?),
+        };
+        request
+            .send()
+            .map_err(|e| eyre::eyre!("{}", self.sanitize(&format!("{e}"))))
+    }
+
+    fn get_json(&self, url: &str) -> Result<reqwest::blocking::Response> {
+        let request = self.http.get(url);
+        let request = match &self.auth {
+            GeminiAuth::ApiKey { .. } => request,
+            GeminiAuth::Vertex { .. } => request.bearer_auth(self.access_token()?),
+        };
+        request
+            .send()
+            .map_err(|e| eyre::eyre!("{}", self.sanitize(&format!("{e}"))))
     }
 
     /// Generate an image via Gemini `generateContent` with IMAGE response modality.
@@ -159,10 +400,7 @@ impl GeminiClient {
         let config = build_generation_config(image_size, aspect_ratio);
         let parts = build_content_parts_borrowed(prompt, ref_images)?;
 
-        let url = format!(
-            "{}/models/{model}:generateContent?key={}",
-            self.base_url, self.api_key
-        );
+        let url = self.url_for_model_method(model, "generateContent");
 
         let body = json!({
             "contents": [{ "role": "user", "parts": parts }],
@@ -170,7 +408,7 @@ impl GeminiClient {
         });
 
         for attempt in 1..=3 {
-            match self.http.post(&url).json(&body).send() {
+            match self.post_json(&url, &body) {
                 Ok(resp) => {
                     if let Ok(data) = resp.json::<Value>() {
                         if let Some(parts) = data
@@ -239,17 +477,14 @@ impl GeminiClient {
         ];
 
         let config = json!({ "responseModalities": ["IMAGE", "TEXT"] });
-        let url = format!(
-            "{}/models/{model}:generateContent?key={}",
-            self.base_url, self.api_key
-        );
+        let url = self.url_for_model_method(model, "generateContent");
         let body = json!({
             "contents": [{ "role": "user", "parts": parts }],
             "generationConfig": config,
         });
 
         for attempt in 1..=3 {
-            match self.http.post(&url).json(&body).send() {
+            match self.post_json(&url, &body) {
                 Ok(resp) => {
                     if let Ok(data) = resp.json::<Value>() {
                         if let Some(parts) = data
@@ -341,7 +576,7 @@ impl GeminiClient {
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            let url = format!("{}/models/{model}:batchGenerateContent", self.base_url);
+            let url = self.url_for_model_method(model, "batchGenerateContent");
 
             let body = json!({
                 "batch": {
@@ -355,11 +590,12 @@ impl GeminiClient {
             });
 
             // Submit batch
-            let resp = self
-                .http
-                .post(&url)
-                .header("x-goog-api-key", &self.api_key)
-                .json(&body)
+            let request = self.http.post(&url).json(&body);
+            let request = match &self.auth {
+                GeminiAuth::ApiKey { api_key, .. } => request.header("x-goog-api-key", api_key),
+                GeminiAuth::Vertex { .. } => request.bearer_auth(self.access_token()?),
+            };
+            let resp = request
                 .send()
                 .map_err(|e| eyre::eyre!("Batch submit: {}", self.sanitize(&format!("{e}"))))?;
 
@@ -392,11 +628,10 @@ impl GeminiClient {
                 std::thread::sleep(std::time::Duration::from_secs(interval as u64));
                 elapsed += interval as u64;
 
-                let poll_url = format!("{}/{batch_name}?key={}", self.base_url, self.api_key);
-                let poll_resp =
-                    self.http.get(&poll_url).send().map_err(|e| {
-                        eyre::eyre!("Batch poll: {}", self.sanitize(&format!("{e}")))
-                    })?;
+                let poll_url = self.batch_poll_url(&batch_name);
+                let poll_resp = self
+                    .get_json(&poll_url)
+                    .map_err(|e| eyre::eyre!("Batch poll: {e}"))?;
                 let poll_data: Value = poll_resp.json()?;
 
                 let state = poll_data
@@ -485,10 +720,7 @@ impl GeminiClient {
             "image/png"
         };
 
-        let url = format!(
-            "{}/models/{model}:generateContent?key={}",
-            self.base_url, self.api_key
-        );
+        let url = self.url_for_model_method(model, "generateContent");
 
         let body = json!({
             "contents": [{
@@ -508,12 +740,7 @@ impl GeminiClient {
             }
         });
 
-        let resp = self
-            .http
-            .post(&url)
-            .json(&body)
-            .send()
-            .map_err(|e| eyre::eyre!("{}", self.sanitize(&format!("{e}"))))?;
+        let resp = self.post_json(&url, &body)?;
         let data: Value = resp.json()?;
 
         let raw = data
@@ -523,5 +750,26 @@ impl GeminiClient {
 
         let parsed: Value = serde_json::from_str(raw)?;
         Ok(parsed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::vertex_base_url;
+
+    #[test]
+    fn should_build_regional_vertex_base_url_when_location_is_regional() {
+        assert_eq!(
+            vertex_base_url("us-central1", None),
+            "https://us-central1-aiplatform.googleapis.com/v1"
+        );
+    }
+
+    #[test]
+    fn should_build_global_vertex_base_url_when_location_is_global() {
+        assert_eq!(
+            vertex_base_url("global", None),
+            "https://aiplatform.googleapis.com/v1"
+        );
     }
 }
