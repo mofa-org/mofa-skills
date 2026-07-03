@@ -1,0 +1,46 @@
+{
+  "name": "notebook-source",
+  "version": "0.1.0",
+  "description": "Normalize workspace files into NotebookLM-like source manifests and chunks for source-grounded Octos chat.",
+  "skill_md_auto_inject": true,
+  "tools": [
+    {
+      "name": "source_import",
+      "description": "Import a workspace-relative file as a notebook source. Creates notebook-sources/<source_id>/source.md, metadata.json, chunks.jsonl, and updates notebook-sources/manifest.json.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string", "description": "Workspace root. Defaults to current directory." },
+          "path": { "type": "string", "description": "Workspace-relative source path, for example uploads/report.md." },
+          "title": { "type": "string", "description": "Human-readable source title." },
+          "kind": { "type": "string", "description": "Optional source kind override." },
+          "source_id": { "type": "string", "description": "Optional stable source id." }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "source_normalize",
+      "description": "Rebuild chunks and metadata for an existing notebook source id after source.md was edited.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string", "description": "Workspace root. Defaults to current directory." },
+          "source_id": { "type": "string", "description": "Notebook source id from notebook-sources/manifest.json." }
+        },
+        "required": ["source_id"]
+      }
+    },
+    {
+      "name": "source_manifest",
+      "description": "Return the current notebook source manifest and source count.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string", "description": "Workspace root. Defaults to current directory." }
+        }
+      }
+    }
+  ]
+}
+
