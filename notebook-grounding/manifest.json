@@ -1,0 +1,47 @@
+{
+  "name": "notebook-grounding",
+  "version": "0.1.0",
+  "description": "Search, inspect, and cite normalized notebook sources for source-grounded Octos chat.",
+  "skill_md_auto_inject": true,
+  "tools": [
+    {
+      "name": "source_search",
+      "description": "Search normalized notebook source chunks. Use before source-grounded claims.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string", "description": "Workspace root. Defaults to current directory." },
+          "query": { "type": "string", "description": "Search query." },
+          "source_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional source ids to restrict search." },
+          "limit": { "type": "integer", "description": "Maximum hits to return." }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "source_lookup",
+      "description": "Return exact text and metadata for a notebook source chunk id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string", "description": "Workspace root. Defaults to current directory." },
+          "chunk_id": { "type": "string", "description": "Chunk id such as report#chunk-0002." }
+        },
+        "required": ["chunk_id"]
+      }
+    },
+    {
+      "name": "source_cite",
+      "description": "Format chunk ids as stable path and line citations.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string", "description": "Workspace root. Defaults to current directory." },
+          "chunk_ids": { "type": "array", "items": { "type": "string" }, "description": "Chunk ids to cite." }
+        },
+        "required": ["chunk_ids"]
+      }
+    }
+  ]
+}
+
