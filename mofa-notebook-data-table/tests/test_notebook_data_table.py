@@ -93,6 +93,12 @@ class NotebookDataTableTests(unittest.TestCase):
                 "GEMINI_BASE_URL",
                 "OPENAI_API_KEY",
                 "OPENAI_BASE_URL",
+                "GOOGLE_APPLICATION_CREDENTIALS",
+                "GOOGLE_CLOUD_PROJECT",
+                "GOOGLE_CLOUD_LOCATION",
+                "VERTEX_BASE_URL",
+                "VERTEX_ACCESS_TOKEN",
+                "GOOGLE_OAUTH_ACCESS_TOKEN",
                 "MOFA_DATA_TABLE_PROVIDER",
                 "MOFA_DATA_TABLE_MODEL",
             },
@@ -107,6 +113,7 @@ class NotebookDataTableTests(unittest.TestCase):
         self.assertNotIn("data_table_export", content)
         self.assertIn("GEMINI_API_KEY", content)
         self.assertIn("OPENAI_API_KEY", content)
+        self.assertIn("GOOGLE_APPLICATION_CREDENTIALS", content)
 
     def test_generates_grounded_table_and_artifacts_from_prose_source(self):
         self.assertTrue(

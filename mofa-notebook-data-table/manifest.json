@@ -46,7 +46,8 @@
             "type": "string",
             "enum": [
               "gemini",
-              "openai"
+              "openai",
+              "vertex"
             ],
             "description": "Optional standalone provider override."
           },
@@ -64,6 +65,12 @@
         "GEMINI_BASE_URL",
         "OPENAI_API_KEY",
         "OPENAI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
         "MOFA_DATA_TABLE_PROVIDER",
         "MOFA_DATA_TABLE_MODEL"
       ],

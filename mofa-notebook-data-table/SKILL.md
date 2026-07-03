@@ -18,7 +18,7 @@ Imported notebook sources are required. Optional arguments:
 - `title`: Set the table title and artifact filename.
 - `language`: Request an output language.
 - `max_rows`: Limit output to 1-500 rows.
-- `provider`: Select `gemini` or `openai`.
+- `provider`: Select `gemini`, `openai`, or `vertex`.
 - `model`: Override the provider's default model.
 
 Octos injects `workspace_root`. Standalone callers may pass `workspace`.
@@ -37,8 +37,12 @@ absolute `files_to_send` paths.
 ## Model Configuration
 
 Gemini is selected when `GEMINI_API_KEY` is available. OpenAI-compatible chat
-completions use `OPENAI_API_KEY`. Optional endpoint overrides are
-`GEMINI_BASE_URL` and `OPENAI_BASE_URL`. `MOFA_DATA_TABLE_PROVIDER` and
+completions use `OPENAI_API_KEY`. Vertex AI Gemini uses a Google service
+account JSON path or raw JSON from `GOOGLE_APPLICATION_CREDENTIALS`; set
+`GOOGLE_CLOUD_PROJECT` only when the JSON lacks `project_id`. Optional endpoint
+overrides are `GEMINI_BASE_URL`, `OPENAI_BASE_URL`, and `VERTEX_BASE_URL`.
+`GOOGLE_CLOUD_LOCATION` defaults to `us-central1`; set it to `global` for the
+global Vertex endpoint. `MOFA_DATA_TABLE_PROVIDER` and
 `MOFA_DATA_TABLE_MODEL` provide standalone defaults.
 
 ## Standalone Invocation

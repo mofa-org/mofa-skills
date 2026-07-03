@@ -1,5 +1,6 @@
 import importlib
 import importlib.util
+import json
 import os
 import sys
 import unittest
@@ -25,6 +26,14 @@ class RecordingTransport:
     def __call__(self, url, headers, payload):
         self.calls.append({"url": url, "headers": headers, "payload": payload})
         return self.response
+
+
+SERVICE_ACCOUNT = {
+    "client_email": "data-table@example.iam.gserviceaccount.com",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n",
+    "project_id": "demo-project",
+    "token_uri": "https://oauth2.example/token",
+}
 
 
 class LlmClientTests(unittest.TestCase):
@@ -108,6 +117,37 @@ class LlmClientTests(unittest.TestCase):
             SCHEMA,
         )
 
+    def test_vertex_uses_service_account_project_and_bearer_auth(self):
+        module = self.module()
+        transport = RecordingTransport(
+            {
+                "candidates": [
+                    {"content": {"parts": [{"text": "{\"title\":\"Grounded\"}"}]}}
+                ]
+            }
+        )
+        client = module.VertexGeminiClient(
+            service_account=SERVICE_ACCOUNT,
+            access_token_provider=lambda _: "vertex-token",
+            model="gemini-vertex",
+            location="global",
+            transport=transport,
+        )
+
+        result = client.generate("Use sources", SCHEMA)
+
+        self.assertEqual(result, {"title": "Grounded"})
+        call = transport.calls[0]
+        self.assertEqual(
+            call["url"],
+            "https://aiplatform.googleapis.com/v1/projects/demo-project/locations/global/publishers/google/models/gemini-vertex:generateContent",
+        )
+        self.assertEqual(call["headers"]["Authorization"], "Bearer vertex-token")
+        self.assertEqual(
+            call["payload"]["generationConfig"]["responseMimeType"],
+            "application/json",
+        )
+
     def test_factory_prefers_explicit_provider_then_gemini(self):
         module = self.module()
         env = {
@@ -147,6 +187,23 @@ class LlmClientTests(unittest.TestCase):
         )
         self.assertIsInstance(client, module.OpenAIClient)
         self.assertEqual(client.model, "env-model")
+
+    def test_factory_uses_vertex_service_account_credentials(self):
+        module = self.module()
+        client = module.create_llm_client(
+            {"provider": "vertex"},
+            env={
+                "GOOGLE_APPLICATION_CREDENTIALS": json.dumps(SERVICE_ACCOUNT),
+                "MOFA_DATA_TABLE_MODEL": "vertex-env-model",
+                "GOOGLE_CLOUD_LOCATION": "global",
+            },
+            transport=RecordingTransport({}),
+            access_token_provider=lambda _: "vertex-token",
+        )
+
+        self.assertIsInstance(client, module.VertexGeminiClient)
+        self.assertEqual(client.model, "vertex-env-model")
+        self.assertEqual(client.location, "global")
 
 
 if __name__ == "__main__":
