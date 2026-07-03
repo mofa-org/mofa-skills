@@ -94,6 +94,7 @@ class NotebookDataTableTests(unittest.TestCase):
                 "OPENAI_API_KEY",
                 "OPENAI_BASE_URL",
                 "GOOGLE_APPLICATION_CREDENTIALS",
+                "VERTEX_SA_JSON",
                 "GOOGLE_CLOUD_PROJECT",
                 "GOOGLE_CLOUD_LOCATION",
                 "VERTEX_BASE_URL",
@@ -114,6 +115,7 @@ class NotebookDataTableTests(unittest.TestCase):
         self.assertIn("GEMINI_API_KEY", content)
         self.assertIn("OPENAI_API_KEY", content)
         self.assertIn("GOOGLE_APPLICATION_CREDENTIALS", content)
+        self.assertIn("VERTEX_SA_JSON", content)
 
     def test_generates_grounded_table_and_artifacts_from_prose_source(self):
         self.assertTrue(

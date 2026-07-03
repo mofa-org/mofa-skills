@@ -205,6 +205,19 @@ class LlmClientTests(unittest.TestCase):
         self.assertEqual(client.model, "vertex-env-model")
         self.assertEqual(client.location, "global")
 
+    def test_factory_uses_octos_vertex_service_account_env(self):
+        module = self.module()
+        client = module.create_llm_client(
+            {},
+            env={
+                "VERTEX_SA_JSON": json.dumps(SERVICE_ACCOUNT),
+            },
+            transport=RecordingTransport({}),
+            access_token_provider=lambda _: "vertex-token",
+        )
+
+        self.assertIsInstance(client, module.VertexGeminiClient)
+
 
 if __name__ == "__main__":
     unittest.main()

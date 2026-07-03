@@ -38,7 +38,8 @@ absolute `files_to_send` paths.
 
 Gemini is selected when `GEMINI_API_KEY` is available. OpenAI-compatible chat
 completions use `OPENAI_API_KEY`. Vertex AI Gemini uses a Google service
-account JSON path or raw JSON from `GOOGLE_APPLICATION_CREDENTIALS`; set
+account JSON path or raw JSON from `GOOGLE_APPLICATION_CREDENTIALS`, or Octos'
+profile/keychain service account JSON from `VERTEX_SA_JSON`; set
 `GOOGLE_CLOUD_PROJECT` only when the JSON lacks `project_id`. Optional endpoint
 overrides are `GEMINI_BASE_URL`, `OPENAI_BASE_URL`, and `VERTEX_BASE_URL`.
 `GOOGLE_CLOUD_LOCATION` defaults to `us-central1`; set it to `global` for the

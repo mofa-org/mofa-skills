@@ -354,7 +354,9 @@ def create_llm_client(
     ).strip().lower()
     gemini_key = str(values.get("GEMINI_API_KEY") or "").strip()
     openai_key = str(values.get("OPENAI_API_KEY") or "").strip()
-    vertex_credentials = str(values.get("GOOGLE_APPLICATION_CREDENTIALS") or "").strip()
+    vertex_credentials = str(
+        values.get("GOOGLE_APPLICATION_CREDENTIALS") or values.get("VERTEX_SA_JSON") or ""
+    ).strip()
     vertex_access_token = str(
         values.get("VERTEX_ACCESS_TOKEN")
         or values.get("GOOGLE_OAUTH_ACCESS_TOKEN")
@@ -370,7 +372,7 @@ def create_llm_client(
         else:
             raise ValueError(
                 "No supported model credential is configured. "
-                "Set GEMINI_API_KEY, OPENAI_API_KEY, or GOOGLE_APPLICATION_CREDENTIALS."
+                "Set GEMINI_API_KEY, OPENAI_API_KEY, GOOGLE_APPLICATION_CREDENTIALS, or VERTEX_SA_JSON."
             )
     if provider not in {"gemini", "openai", "vertex"}:
         raise ValueError(f"Unsupported data table model provider: {provider}")
@@ -401,7 +403,7 @@ def create_llm_client(
         else:
             if not vertex_credentials:
                 raise ValueError(
-                    "GOOGLE_APPLICATION_CREDENTIALS is required for provider 'vertex'."
+                    "GOOGLE_APPLICATION_CREDENTIALS or VERTEX_SA_JSON is required for provider 'vertex'."
                 )
             service_account = _load_service_account(vertex_credentials)
             token_provider = access_token_provider
