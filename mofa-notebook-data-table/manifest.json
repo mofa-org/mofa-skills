@@ -23,7 +23,9 @@
           },
           "source_ids": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "Optional imported source IDs. Defaults to all notebook sources."
           },
           "title": {
@@ -42,7 +44,10 @@
           },
           "provider": {
             "type": "string",
-            "enum": ["gemini", "openai"],
+            "enum": [
+              "gemini",
+              "openai"
+            ],
             "description": "Optional standalone provider override."
           },
           "model": {
@@ -50,7 +55,9 @@
             "description": "Optional model override."
           }
         },
-        "x-octos-host-config-keys": ["workspace_root"]
+        "x-octos-host-config-keys": [
+          "workspace_root"
+        ]
       },
       "env": [
         "GEMINI_API_KEY",
@@ -62,5 +69,6 @@
       ],
       "concurrency_class": "exclusive"
     }
-  ]
+  ],
+  "sha256": "6b716ac3b47f0aa0633856defcc6feba875fecc03303fbacf837c3dfd6025ffd"
 }
