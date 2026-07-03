@@ -1,0 +1,22 @@
+{
+  "name": "notebook-mindmap",
+  "version": "0.1.0",
+  "description": "Generate source-grounded mind map Markdown and JSON from normalized notebook sources.",
+  "skill_md_auto_inject": true,
+  "tools": [
+    {
+      "name": "mindmap_generate",
+      "description": "Generate a source-grounded mind map from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string" },
+          "focus": { "type": "string" },
+          "source_ids": { "type": "array", "items": { "type": "string" } },
+          "max_nodes": { "type": "integer" }
+        }
+      }
+    }
+  ]
+}
+
