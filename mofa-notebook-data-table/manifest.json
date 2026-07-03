@@ -1,36 +1,66 @@
 {
   "name": "mofa-notebook-data-table",
-  "version": "0.1.0",
-  "description": "Extract Markdown tables from notebook sources and export them as CSV or JSON.",
-  "skill_md_auto_inject": true,
+  "version": "0.2.0",
+  "description": "Generate grounded data tables from imported notebook sources with cell-level citations.",
   "tools": [
     {
-      "name": "data_table_extract",
-      "description": "Extract the first Markdown table found in notebook sources to notebook-outputs/tables/<name>.json.",
+      "name": "data_table_generate",
+      "description": "Generate a grounded data table from the current project's imported notebook sources. The skill selects source chunks, calls its configured model, validates cell citations, and exports JSON, Markdown, table CSV, and citation CSV artifacts in one operation.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "workspace": { "type": "string" },
-          "workspace_root": { "type": "string" },
-          "name": { "type": "string" }
+          "workspace": {
+            "type": "string",
+            "description": "Workspace path for standalone use. Octos injects workspace_root instead."
+          },
+          "workspace_root": {
+            "type": "string",
+            "description": "Current project workspace injected by the Octos host."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Optional instructions describing the desired rows, columns, and comparison."
+          },
+          "source_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optional imported source IDs. Defaults to all notebook sources."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional output table title."
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional output language."
+          },
+          "max_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 100
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["gemini", "openai"],
+            "description": "Optional standalone provider override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override."
+          }
         },
         "x-octos-host-config-keys": ["workspace_root"]
-      }
-    },
-    {
-      "name": "data_table_export",
-      "description": "Export an extracted table JSON file to CSV or JSON.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "workspace": { "type": "string" },
-          "workspace_root": { "type": "string" },
-          "table_path": { "type": "string" },
-          "format": { "type": "string", "enum": ["csv", "json", "xlsx"] }
-        },
-        "required": ["table_path"],
-        "x-octos-host-config-keys": ["workspace_root"]
-      }
+      },
+      "env": [
+        "GEMINI_API_KEY",
+        "GEMINI_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "MOFA_DATA_TABLE_PROVIDER",
+        "MOFA_DATA_TABLE_MODEL"
+      ],
+      "concurrency_class": "exclusive"
     }
   ]
 }

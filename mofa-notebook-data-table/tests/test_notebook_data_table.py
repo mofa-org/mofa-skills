@@ -15,6 +15,28 @@ from notebook_data_table import handle_tool
 
 
 class NotebookDataTableTests(unittest.TestCase):
+    def test_manifest_exposes_only_grounded_generate_tool(self):
+        manifest_path = ROOT / "mofa-notebook-data-table" / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        self.assertEqual([tool["name"] for tool in manifest["tools"]], ["data_table_generate"])
+        tool = manifest["tools"][0]
+        self.assertEqual(
+            tool["input_schema"]["x-octos-host-config-keys"],
+            ["workspace_root"],
+        )
+        self.assertEqual(
+            set(tool["env"]),
+            {
+                "GEMINI_API_KEY",
+                "GEMINI_BASE_URL",
+                "OPENAI_API_KEY",
+                "OPENAI_BASE_URL",
+                "MOFA_DATA_TABLE_PROVIDER",
+                "MOFA_DATA_TABLE_MODEL",
+            },
+        )
+
     def test_extracts_markdown_table_and_exports_csv_json(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
