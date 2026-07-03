@@ -15,6 +15,7 @@
     "tts", "voice-cloning", "speech", "audio", "qwen3-tts", "emotion",
     "podcast", "multi-speaker", "dialogue", "talk-show",
     "pdf", "excel", "xlsx", "spreadsheet",
-    "slides", "presentation", "editable", "vqa"
+    "slides", "presentation", "editable", "vqa",
+    "notebook", "source-grounded", "study", "mindmap", "video-overview"
   ]
 }

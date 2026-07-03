@@ -208,14 +208,14 @@ The [octos-hub](https://github.com/octos-org/octos-hub) is automatically synced 
 
 ### How it works
 
-1. `scripts/gen-registry.py` scans all `mofa-*/` directories for `manifest.json` or `SKILL.md`
+1. `scripts/gen-registry.py` scans all `mofa-*/` and `notebook-*/` directories for `manifest.json` or `SKILL.md`
 2. Collects skill names, binary requirements (`requires.bins` from manifests)
 3. Merges with curated metadata from `registry-meta.json` (tags, description, excludes)
 4. The `sync-registry` CI job pushes the generated `registry.json` to `octos-org/octos-hub` via GitHub API
 
 ### Adding/removing skills
 
-- **Add a skill**: Create `mofa-<name>/` with a `manifest.json` or `SKILL.md`. It will appear in the registry on next CI pass.
+- **Add a skill**: Create `mofa-<name>/` or `notebook-<name>/` with a `manifest.json` or `SKILL.md`. It will appear in the registry on next CI pass.
 - **Remove a skill**: Delete the directory, or add it to `exclude_skills` in `registry-meta.json`.
 - **Update tags/description**: Edit `registry-meta.json`.
 - **Add binary requirements**: Set `requires.bins` in the skill's `manifest.json` (e.g., `"requires": {"bins": ["ominix-api"]}`).
