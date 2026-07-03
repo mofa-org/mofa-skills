@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from notebook_common.output import read_jsonl
+from notebook_common.paths import workspace_from_args
 from notebook_common.search import search_chunks
 from notebook_common.sources import load_manifest
 
@@ -16,7 +17,7 @@ def failure(message: str) -> Dict[str, Any]:
 
 
 def _workspace(args: Dict[str, Any]) -> Path:
-    return Path(args.get("workspace") or ".").resolve()
+    return workspace_from_args(args)
 
 
 def _manifest_sources(workspace: Path) -> List[Dict[str, Any]]:
@@ -120,4 +121,3 @@ def handle_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if tool_name == "source_cite":
         return source_cite(args)
     return failure(f"unknown mofa-notebook-grounding tool: {tool_name}")
-

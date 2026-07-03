@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,10 @@ def resolve_workspace_path(workspace: Path, rel_path: str) -> Path:
     return resolved
 
 
+def workspace_from_args(args: Dict[str, Any]) -> Path:
+    return Path(args.get("workspace") or args.get("workspace_root") or ".").resolve()
+
+
 def workspace_relative(workspace: Path, path: Path) -> str:
     return path.resolve().relative_to(workspace.resolve()).as_posix()
 
@@ -39,4 +44,3 @@ def ensure_notebook_dirs(workspace: Path) -> NotebookDirs:
         outputs_dir=outputs_dir,
         manifest_path=sources_dir / "manifest.json",
     )
-

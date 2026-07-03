@@ -11,11 +11,13 @@
         "type": "object",
         "properties": {
           "workspace": { "type": "string" },
+          "workspace_root": { "type": "string" },
           "title": { "type": "string" },
           "style": { "type": "string" },
           "duration_minutes": { "type": "integer" },
           "source_ids": { "type": "array", "items": { "type": "string" } }
-        }
+        },
+        "x-octos-host-config-keys": ["workspace_root"]
       }
     }
   ]

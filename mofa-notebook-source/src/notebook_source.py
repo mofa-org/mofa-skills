@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from notebook_common.chunking import chunk_markdown
 from notebook_common.output import write_jsonl
-from notebook_common.paths import ensure_notebook_dirs, resolve_workspace_path
+from notebook_common.paths import ensure_notebook_dirs, resolve_workspace_path, workspace_from_args
 from notebook_common.sources import (
     SourceEntry,
     load_manifest,
@@ -29,7 +29,7 @@ def failure(message: str) -> Dict[str, Any]:
 
 
 def _workspace(args: Dict[str, Any]) -> Path:
-    return Path(args.get("workspace") or ".").resolve()
+    return workspace_from_args(args)
 
 
 def _read_text_file(path: Path) -> str:
@@ -166,4 +166,3 @@ def handle_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if tool_name == "source_manifest":
         return source_manifest(args)
     return failure(f"unknown mofa-notebook-source tool: {tool_name}")
-

@@ -11,9 +11,11 @@
         "type": "object",
         "properties": {
           "workspace": { "type": "string" },
+          "workspace_root": { "type": "string" },
           "focus": { "type": "string" },
           "source_ids": { "type": "array", "items": { "type": "string" } }
-        }
+        },
+        "x-octos-host-config-keys": ["workspace_root"]
       }
     },
     {
@@ -23,8 +25,10 @@
         "type": "object",
         "properties": {
           "workspace": { "type": "string" },
+          "workspace_root": { "type": "string" },
           "source_ids": { "type": "array", "items": { "type": "string" } }
-        }
+        },
+        "x-octos-host-config-keys": ["workspace_root"]
       }
     },
     {
@@ -34,8 +38,10 @@
         "type": "object",
         "properties": {
           "workspace": { "type": "string" },
+          "workspace_root": { "type": "string" },
           "source_ids": { "type": "array", "items": { "type": "string" } }
-        }
+        },
+        "x-octos-host-config-keys": ["workspace_root"]
       }
     },
     {
@@ -45,10 +51,11 @@
         "type": "object",
         "properties": {
           "workspace": { "type": "string" },
+          "workspace_root": { "type": "string" },
           "source_ids": { "type": "array", "items": { "type": "string" } }
-        }
+        },
+        "x-octos-host-config-keys": ["workspace_root"]
       }
     }
   ]
 }
-

@@ -11,9 +11,11 @@
         "type": "object",
         "properties": {
           "workspace": { "type": "string" },
+          "workspace_root": { "type": "string" },
           "topic": { "type": "string" },
           "candidates": { "type": "array", "items": { "type": "object" } }
-        }
+        },
+        "x-octos-host-config-keys": ["workspace_root"]
       }
     },
     {
@@ -23,11 +25,12 @@
         "type": "object",
         "properties": {
           "workspace": { "type": "string" },
+          "workspace_root": { "type": "string" },
           "candidates": { "type": "array", "items": { "type": "object" } }
         },
-        "required": ["candidates"]
+        "required": ["candidates"],
+        "x-octos-host-config-keys": ["workspace_root"]
       }
     }
   ]
 }
-

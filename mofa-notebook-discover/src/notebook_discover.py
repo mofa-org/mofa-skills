@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
+from notebook_common.paths import workspace_from_args
 from notebook_common.sources import slugify
 from notebook_source import handle_tool as source_tool
 
@@ -16,7 +17,7 @@ def failure(message: str) -> Dict[str, Any]:
 
 
 def _workspace(args: Dict[str, Any]) -> Path:
-    return Path(args.get("workspace") or ".").resolve()
+    return workspace_from_args(args)
 
 
 def _tokens(text: str) -> List[str]:
@@ -88,4 +89,3 @@ def handle_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if tool_name == "import_discovered_sources":
         return import_discovered_sources(args)
     return failure(f"unknown mofa-notebook-discover tool: {tool_name}")
-

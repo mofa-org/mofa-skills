@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from notebook_common.output import read_jsonl
-from notebook_common.paths import resolve_workspace_path
+from notebook_common.paths import resolve_workspace_path, workspace_from_args
 from notebook_common.sources import load_manifest, slugify
 
 
@@ -17,7 +17,7 @@ def failure(message: str) -> Dict[str, Any]:
 
 
 def _workspace(args: Dict[str, Any]) -> Path:
-    return Path(args.get("workspace") or ".").resolve()
+    return workspace_from_args(args)
 
 
 def _source_texts(workspace: Path) -> List[str]:
@@ -109,4 +109,3 @@ def handle_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if tool_name == "data_table_export":
         return data_table_export(args)
     return failure(f"unknown mofa-notebook-data-table tool: {tool_name}")
-

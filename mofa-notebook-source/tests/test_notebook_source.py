@@ -69,6 +69,20 @@ class NotebookSourceTests(unittest.TestCase):
             self.assertEqual(result["data"]["source_count"], 1)
             self.assertEqual(result["data"]["sources"][0]["title"], "Notes")
 
+    def test_source_import_uses_workspace_root_when_workspace_is_absent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "uploads").mkdir()
+            (workspace / "uploads" / "notes.md").write_text("# Notes\n\nrooted import", encoding="utf-8")
+
+            result = handle_tool(
+                "source_import",
+                {"workspace_root": str(workspace), "path": "uploads/notes.md", "title": "Notes"},
+            )
+
+            self.assertTrue(result["success"], result)
+            self.assertTrue((workspace / "notebook-sources/notes/source.md").is_file())
+
     def test_source_normalize_rebuilds_chunks_for_existing_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
