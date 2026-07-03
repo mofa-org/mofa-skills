@@ -1,0 +1,54 @@
+{
+  "name": "notebook-study",
+  "version": "0.1.0",
+  "description": "Generate source-grounded study guides, FAQs, quizzes, and flashcards from normalized notebook sources.",
+  "skill_md_auto_inject": true,
+  "tools": [
+    {
+      "name": "study_guide_generate",
+      "description": "Generate a source-grounded study guide Markdown file from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string" },
+          "focus": { "type": "string" },
+          "source_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "faq_generate",
+      "description": "Generate a source-grounded FAQ Markdown file from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string" },
+          "source_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "quiz_generate",
+      "description": "Generate a source-grounded quiz Markdown file from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string" },
+          "source_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    {
+      "name": "flashcards_generate",
+      "description": "Generate source-grounded flashcards from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string" },
+          "source_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  ]
+}
+
