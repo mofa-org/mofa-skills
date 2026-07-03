@@ -63,43 +63,43 @@ notebook-outputs/
 
 ## File Structure
 
-- Create `notebook-source/`
+- Create `mofa-notebook-source/`
   - `SKILL.md`: source import and normalization instructions.
   - `manifest.json`: `source_import`, `source_normalize`, `source_manifest`.
   - `main`: executable Python entrypoint.
   - `src/notebook_source.py`: implementation.
   - `tests/test_notebook_source.py`: unit tests.
-- Create `notebook-grounding/`
+- Create `mofa-notebook-grounding/`
   - `SKILL.md`: source lookup and citation instructions.
   - `manifest.json`: `source_search`, `source_lookup`, `source_cite`.
   - `main`: executable Python entrypoint.
   - `src/notebook_grounding.py`: implementation.
   - `tests/test_notebook_grounding.py`: unit tests.
-- Create `notebook-study/`
+- Create `mofa-notebook-study/`
   - `SKILL.md`: study guide, FAQ, quiz, flashcard instructions.
   - `manifest.json`: `study_guide_generate`, `faq_generate`, `quiz_generate`, `flashcards_generate`.
   - `main`: executable Python entrypoint.
   - `src/notebook_study.py`: implementation.
   - `tests/test_notebook_study.py`: unit tests.
-- Create `notebook-mindmap/`
+- Create `mofa-notebook-mindmap/`
   - `SKILL.md`: mind map generation instructions.
   - `manifest.json`: `mindmap_generate`.
   - `main`: executable Python entrypoint.
   - `src/notebook_mindmap.py`: implementation.
   - `tests/test_notebook_mindmap.py`: unit tests.
-- Create `notebook-data-table/`
+- Create `mofa-notebook-data-table/`
   - `SKILL.md`: table extraction/export instructions.
   - `manifest.json`: `data_table_extract`, `data_table_export`.
   - `main`: executable Python entrypoint.
   - `src/notebook_data_table.py`: implementation.
   - `tests/test_notebook_data_table.py`: unit tests.
-- Create `notebook-discover/`
+- Create `mofa-notebook-discover/`
   - `SKILL.md`: source discovery/import handoff instructions.
   - `manifest.json`: `discover_sources`, `import_discovered_sources`.
   - `main`: executable Python entrypoint.
   - `src/notebook_discover.py`: implementation.
   - `tests/test_notebook_discover.py`: unit tests.
-- Create `notebook-video-overview/`
+- Create `mofa-notebook-video-overview/`
   - `SKILL.md`: video overview planning instructions.
   - `manifest.json`: `video_overview_generate`.
   - `main`: executable Python entrypoint.
@@ -161,14 +161,14 @@ git add notebook_common
 git commit -m "feat(notebook): add shared source contract helpers"
 ```
 
-## Task 2: `notebook-source`
+## Task 2: `mofa-notebook-source`
 
 **Files:**
-- Create: `notebook-source/SKILL.md`
-- Create: `notebook-source/manifest.json`
-- Create: `notebook-source/main`
-- Create: `notebook-source/src/notebook_source.py`
-- Create: `notebook-source/tests/test_notebook_source.py`
+- Create: `mofa-notebook-source/SKILL.md`
+- Create: `mofa-notebook-source/manifest.json`
+- Create: `mofa-notebook-source/main`
+- Create: `mofa-notebook-source/src/notebook_source.py`
+- Create: `mofa-notebook-source/tests/test_notebook_source.py`
 
 - [ ] **Step 1: Define manifest tools**
 
@@ -195,7 +195,7 @@ Test importing a workspace file, rejecting traversal, manifest update behavior, 
 Run:
 
 ```bash
-python3 -m unittest discover -s notebook-source/tests
+python3 -m unittest discover -s mofa-notebook-source/tests
 ```
 
 Expected: all tests pass.
@@ -203,18 +203,18 @@ Expected: all tests pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add notebook-source
+git add mofa-notebook-source
 git commit -m "feat(notebook): add source import skill"
 ```
 
-## Task 3: `notebook-grounding`
+## Task 3: `mofa-notebook-grounding`
 
 **Files:**
-- Create: `notebook-grounding/SKILL.md`
-- Create: `notebook-grounding/manifest.json`
-- Create: `notebook-grounding/main`
-- Create: `notebook-grounding/src/notebook_grounding.py`
-- Create: `notebook-grounding/tests/test_notebook_grounding.py`
+- Create: `mofa-notebook-grounding/SKILL.md`
+- Create: `mofa-notebook-grounding/manifest.json`
+- Create: `mofa-notebook-grounding/main`
+- Create: `mofa-notebook-grounding/src/notebook_grounding.py`
+- Create: `mofa-notebook-grounding/tests/test_notebook_grounding.py`
 
 - [ ] **Step 1: Define manifest tools**
 
@@ -241,7 +241,7 @@ Test ranked search, selected-source filtering, missing source behavior, and cita
 Run:
 
 ```bash
-python3 -m unittest discover -s notebook-grounding/tests
+python3 -m unittest discover -s mofa-notebook-grounding/tests
 ```
 
 Expected: all tests pass.
@@ -249,18 +249,18 @@ Expected: all tests pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add notebook-grounding
+git add mofa-notebook-grounding
 git commit -m "feat(notebook): add source grounding skill"
 ```
 
-## Task 4: `notebook-study`
+## Task 4: `mofa-notebook-study`
 
 **Files:**
-- Create: `notebook-study/SKILL.md`
-- Create: `notebook-study/manifest.json`
-- Create: `notebook-study/main`
-- Create: `notebook-study/src/notebook_study.py`
-- Create: `notebook-study/tests/test_notebook_study.py`
+- Create: `mofa-notebook-study/SKILL.md`
+- Create: `mofa-notebook-study/manifest.json`
+- Create: `mofa-notebook-study/main`
+- Create: `mofa-notebook-study/src/notebook_study.py`
+- Create: `mofa-notebook-study/tests/test_notebook_study.py`
 
 - [ ] **Step 1: Define manifest tools**
 
@@ -283,7 +283,7 @@ Test output file creation, source reference inclusion, selected-source filtering
 Run:
 
 ```bash
-python3 -m unittest discover -s notebook-study/tests
+python3 -m unittest discover -s mofa-notebook-study/tests
 ```
 
 Expected: all tests pass.
@@ -291,18 +291,18 @@ Expected: all tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add notebook-study
+git add mofa-notebook-study
 git commit -m "feat(notebook): add study output skill"
 ```
 
-## Task 5: `notebook-mindmap`
+## Task 5: `mofa-notebook-mindmap`
 
 **Files:**
-- Create: `notebook-mindmap/SKILL.md`
-- Create: `notebook-mindmap/manifest.json`
-- Create: `notebook-mindmap/main`
-- Create: `notebook-mindmap/src/notebook_mindmap.py`
-- Create: `notebook-mindmap/tests/test_notebook_mindmap.py`
+- Create: `mofa-notebook-mindmap/SKILL.md`
+- Create: `mofa-notebook-mindmap/manifest.json`
+- Create: `mofa-notebook-mindmap/main`
+- Create: `mofa-notebook-mindmap/src/notebook_mindmap.py`
+- Create: `mofa-notebook-mindmap/tests/test_notebook_mindmap.py`
 
 - [ ] **Step 1: Define `mindmap_generate`**
 
@@ -325,21 +325,21 @@ Test heading hierarchy, citation propagation, max node limit, and output paths.
 Run:
 
 ```bash
-python3 -m unittest discover -s notebook-mindmap/tests
-git add notebook-mindmap
+python3 -m unittest discover -s mofa-notebook-mindmap/tests
+git add mofa-notebook-mindmap
 git commit -m "feat(notebook): add mind map skill"
 ```
 
 Expected: tests pass and commit succeeds.
 
-## Task 6: `notebook-data-table`
+## Task 6: `mofa-notebook-data-table`
 
 **Files:**
-- Create: `notebook-data-table/SKILL.md`
-- Create: `notebook-data-table/manifest.json`
-- Create: `notebook-data-table/main`
-- Create: `notebook-data-table/src/notebook_data_table.py`
-- Create: `notebook-data-table/tests/test_notebook_data_table.py`
+- Create: `mofa-notebook-data-table/SKILL.md`
+- Create: `mofa-notebook-data-table/manifest.json`
+- Create: `mofa-notebook-data-table/main`
+- Create: `mofa-notebook-data-table/src/notebook_data_table.py`
+- Create: `mofa-notebook-data-table/tests/test_notebook_data_table.py`
 
 - [ ] **Step 1: Define tools**
 
@@ -362,21 +362,21 @@ Test Markdown table extraction, CSV export, JSON export, and no-table behavior.
 Run:
 
 ```bash
-python3 -m unittest discover -s notebook-data-table/tests
-git add notebook-data-table
+python3 -m unittest discover -s mofa-notebook-data-table/tests
+git add mofa-notebook-data-table
 git commit -m "feat(notebook): add data table skill"
 ```
 
 Expected: tests pass and commit succeeds.
 
-## Task 7: `notebook-discover`
+## Task 7: `mofa-notebook-discover`
 
 **Files:**
-- Create: `notebook-discover/SKILL.md`
-- Create: `notebook-discover/manifest.json`
-- Create: `notebook-discover/main`
-- Create: `notebook-discover/src/notebook_discover.py`
-- Create: `notebook-discover/tests/test_notebook_discover.py`
+- Create: `mofa-notebook-discover/SKILL.md`
+- Create: `mofa-notebook-discover/manifest.json`
+- Create: `mofa-notebook-discover/main`
+- Create: `mofa-notebook-discover/src/notebook_discover.py`
+- Create: `mofa-notebook-discover/tests/test_notebook_discover.py`
 
 - [ ] **Step 1: Define tools**
 
@@ -399,21 +399,21 @@ Test candidate ranking, output file creation, and importing local candidate file
 Run:
 
 ```bash
-python3 -m unittest discover -s notebook-discover/tests
-git add notebook-discover
+python3 -m unittest discover -s mofa-notebook-discover/tests
+git add mofa-notebook-discover
 git commit -m "feat(notebook): add source discovery skill"
 ```
 
 Expected: tests pass and commit succeeds.
 
-## Task 8: `notebook-video-overview`
+## Task 8: `mofa-notebook-video-overview`
 
 **Files:**
-- Create: `notebook-video-overview/SKILL.md`
-- Create: `notebook-video-overview/manifest.json`
-- Create: `notebook-video-overview/main`
-- Create: `notebook-video-overview/src/notebook_video_overview.py`
-- Create: `notebook-video-overview/tests/test_notebook_video_overview.py`
+- Create: `mofa-notebook-video-overview/SKILL.md`
+- Create: `mofa-notebook-video-overview/manifest.json`
+- Create: `mofa-notebook-video-overview/main`
+- Create: `mofa-notebook-video-overview/src/notebook_video_overview.py`
+- Create: `mofa-notebook-video-overview/tests/test_notebook_video_overview.py`
 
 - [ ] **Step 1: Define `video_overview_generate`**
 
@@ -432,8 +432,8 @@ Test script sections, scene plan shape, source citations, and output file paths.
 Run:
 
 ```bash
-python3 -m unittest discover -s notebook-video-overview/tests
-git add notebook-video-overview
+python3 -m unittest discover -s mofa-notebook-video-overview/tests
+git add mofa-notebook-video-overview
 git commit -m "feat(notebook): add video overview planning skill"
 ```
 
@@ -467,13 +467,13 @@ Run:
 
 ```bash
 python3 -m unittest discover -s notebook_common/tests
-python3 -m unittest discover -s notebook-source/tests
-python3 -m unittest discover -s notebook-grounding/tests
-python3 -m unittest discover -s notebook-study/tests
-python3 -m unittest discover -s notebook-mindmap/tests
-python3 -m unittest discover -s notebook-data-table/tests
-python3 -m unittest discover -s notebook-discover/tests
-python3 -m unittest discover -s notebook-video-overview/tests
+python3 -m unittest discover -s mofa-notebook-source/tests
+python3 -m unittest discover -s mofa-notebook-grounding/tests
+python3 -m unittest discover -s mofa-notebook-study/tests
+python3 -m unittest discover -s mofa-notebook-mindmap/tests
+python3 -m unittest discover -s mofa-notebook-data-table/tests
+python3 -m unittest discover -s mofa-notebook-discover/tests
+python3 -m unittest discover -s mofa-notebook-video-overview/tests
 ```
 
 Expected: all tests pass.
@@ -503,6 +503,6 @@ Implement in this order:
 8. Video overview.
 9. Registry/verification.
 
-Do not start the higher-level Studio skills until `notebook-source` and
-`notebook-grounding` pass tests, because every later skill depends on the shared
+Do not start the higher-level Studio skills until `mofa-notebook-source` and
+`mofa-notebook-grounding` pass tests, because every later skill depends on the shared
 source manifest and chunk format.

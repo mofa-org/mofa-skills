@@ -1,0 +1,22 @@
+{
+  "name": "mofa-notebook-video-overview",
+  "version": "0.1.0",
+  "description": "Generate source-grounded video overview scripts, scene plans, asset briefs, and handoff notes from normalized notebook sources.",
+  "skill_md_auto_inject": true,
+  "tools": [
+    {
+      "name": "video_overview_generate",
+      "description": "Generate a grounded video overview plan from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string" },
+          "title": { "type": "string" },
+          "style": { "type": "string" },
+          "duration_minutes": { "type": "integer" },
+          "source_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  ]
+}

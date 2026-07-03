@@ -1,0 +1,33 @@
+{
+  "name": "mofa-notebook-data-table",
+  "version": "0.1.0",
+  "description": "Extract Markdown tables from notebook sources and export them as CSV or JSON.",
+  "skill_md_auto_inject": true,
+  "tools": [
+    {
+      "name": "data_table_extract",
+      "description": "Extract the first Markdown table found in notebook sources to notebook-outputs/tables/<name>.json.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string" },
+          "name": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "data_table_export",
+      "description": "Export an extracted table JSON file to CSV or JSON.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string" },
+          "table_path": { "type": "string" },
+          "format": { "type": "string", "enum": ["csv", "json", "xlsx"] }
+        },
+        "required": ["table_path"]
+      }
+    }
+  ]
+}
+

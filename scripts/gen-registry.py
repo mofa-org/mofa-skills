@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate registry.json from skill directories + registry-meta.json.
 
-Scans mofa-*/ and notebook-*/ directories for skill names and binary requirements,
+Scans mofa-*/ directories for skill names and binary requirements,
 merges with hand-curated metadata from registry-meta.json.
 """
 import json
@@ -21,8 +21,7 @@ exclude = set(meta.pop("exclude_skills", []))
 # Discover skills from directories containing manifest.json or SKILL.md
 skills = []
 requires_bins = set()
-skill_paths = sorted({*root.glob("mofa-*/"), *root.glob("notebook-*/")})
-for skill_path in skill_paths:
+for skill_path in sorted(root.glob("mofa-*/")):
     skill_dir = skill_path.name
     if skill_dir in exclude:
         continue
