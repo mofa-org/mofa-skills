@@ -7,6 +7,10 @@ description: Search, inspect, and cite notebook sources created by mofa-notebook
 
 Use this skill after sources have been imported with `mofa-notebook-source`.
 
+## Install-time Shared Dependencies
+
+- `~/.octos/skills/notebook_common/`
+
 ## Workflow
 
 1. Call `source_search` with the user's question or focused keywords.

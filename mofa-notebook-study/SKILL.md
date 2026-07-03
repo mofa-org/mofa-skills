@@ -10,3 +10,7 @@ Markdown files under `notebook-outputs/study/`.
 
 If the user asks for polished prose, first generate the study artifact, then use
 the returned file path as grounding for the final response.
+
+## Install-time Shared Dependencies
+
+- `~/.octos/skills/notebook_common/`

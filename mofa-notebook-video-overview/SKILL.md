@@ -11,3 +11,7 @@ It creates a grounded script, scene plan, asset brief, and handoff notes under
 
 This skill does not render final video. Use the returned handoff file with
 `mofa-slides` for storyboards or decks and `mofa-fm` for narrated audio.
+
+## Install-time Shared Dependencies
+
+- `~/.octos/skills/notebook_common/`

@@ -11,3 +11,8 @@ find candidate URLs/pages, save useful pages into the workspace, then call:
 1. `discover_sources` to rank and record candidates.
 2. `import_discovered_sources` for local candidate files that should become
    notebook sources.
+
+## Install-time Shared Dependencies
+
+- `~/.octos/skills/notebook_common/`
+- `~/.octos/skills/mofa-notebook-source/`

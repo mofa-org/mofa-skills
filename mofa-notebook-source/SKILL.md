@@ -8,6 +8,10 @@ description: Import and normalize user source files into a NotebookLM-like sourc
 Use this skill before source-grounded notebook work when files are not already
 listed in `notebook-sources/manifest.json`.
 
+## Install-time Shared Dependencies
+
+- `~/.octos/skills/notebook_common/`
+
 ## Workflow
 
 1. Call `source_import` for each workspace-relative source path the user selected.
