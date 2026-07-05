@@ -115,10 +115,6 @@ Edit `mofa/config.json` — API keys use `env:VAR_NAME` to read from environment
   "api_keys": {
     "gemini": "env:GEMINI_API_KEY",
     "dashscope": "env:DASHSCOPE_API_KEY"
-  },
-  "vertex": {
-    "service_account_json": "env:GOOGLE_APPLICATION_CREDENTIALS",
-    "location": "global"
   }
 }
 ```
