@@ -77,14 +77,16 @@ def _write_source_files(
     body: str,
     metadata: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
-    source_dir = workspace / "notebook-sources" / entry.id
-    source_dir.mkdir(parents=True, exist_ok=True)
-    source_path = workspace / entry.source_path
+    source_path = resolve_workspace_path(workspace, entry.source_path)
+    metadata_path = resolve_workspace_path(workspace, entry.metadata_path)
+    chunks_path = resolve_workspace_path(workspace, entry.chunks_path)
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    chunks_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.write_text(body, encoding="utf-8")
-    metadata_path = workspace / entry.metadata_path
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     chunks = chunk_markdown(entry.id, entry.title, entry.source_path, body)
-    write_jsonl(workspace / entry.chunks_path, chunks)
+    write_jsonl(chunks_path, chunks)
     return chunks
 
 
@@ -139,7 +141,10 @@ def source_normalize(args: Dict[str, Any]) -> Dict[str, Any]:
     if not source:
         return failure(f"source not found: {source_id}")
     entry = SourceEntry(**source)
-    source_path = workspace / entry.source_path
+    try:
+        source_path = resolve_workspace_path(workspace, entry.source_path)
+    except ValueError as exc:
+        return failure(str(exc))
     if not source_path.exists():
         return failure(f"normalized source file missing: {entry.source_path}")
     body = source_path.read_text(encoding="utf-8", errors="replace")

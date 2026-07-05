@@ -83,6 +83,19 @@ class NotebookGroundingTests(unittest.TestCase):
             self.assertFalse(result["success"])
             self.assertIn("No notebook sources", result["output"])
 
+    def test_source_search_rejects_manifest_chunk_path_escape(self):
+        tmp, workspace = self.make_workspace()
+        self.addCleanup(tmp.cleanup)
+        manifest_path = workspace / "notebook-sources" / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["sources"][0]["chunks_path"] = "../outside.jsonl"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        result = handle_tool("source_search", {"workspace": str(workspace), "query": "risk"})
+
+        self.assertFalse(result["success"])
+        self.assertIn("must not contain '..'", result["output"])
+
 
 if __name__ == "__main__":
     unittest.main()

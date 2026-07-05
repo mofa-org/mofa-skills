@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from notebook_common.output import read_jsonl
-from notebook_common.paths import workspace_from_args
+from notebook_common.paths import resolve_workspace_path, workspace_from_args
 from notebook_common.sources import load_manifest, slugify
 
 
@@ -25,7 +25,7 @@ def _chunks(workspace: Path, source_ids=None) -> List[Dict[str, Any]]:
     for source in load_manifest(workspace).get("sources", []):
         if selected and source.get("id") not in selected:
             continue
-        path = workspace / source["chunks_path"]
+        path = resolve_workspace_path(workspace, str(source["chunks_path"]))
         if path.exists():
             chunks.extend(read_jsonl(path))
     return chunks
@@ -37,7 +37,10 @@ def _citation(chunk: Dict[str, Any]) -> str:
 
 def mindmap_generate(args: Dict[str, Any]) -> Dict[str, Any]:
     workspace = _workspace(args)
-    chunks = _chunks(workspace, args.get("source_ids") if isinstance(args.get("source_ids"), list) else None)
+    try:
+        chunks = _chunks(workspace, args.get("source_ids") if isinstance(args.get("source_ids"), list) else None)
+    except ValueError as exc:
+        return failure(str(exc))
     if not chunks:
         return failure("No notebook sources found. Import sources with source_import first.")
     focus = str(args.get("focus") or "Notebook Mind Map").strip()

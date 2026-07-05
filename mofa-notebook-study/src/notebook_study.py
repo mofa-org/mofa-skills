@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from notebook_common.output import read_jsonl
-from notebook_common.paths import workspace_from_args
+from notebook_common.paths import resolve_workspace_path, workspace_from_args
 from notebook_common.sources import load_manifest, slugify
 
 
@@ -30,7 +30,7 @@ def _sources(workspace: Path, source_ids: Optional[Iterable[str]] = None) -> Lis
 def _chunks(workspace: Path, source_ids: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
     chunks: List[Dict[str, Any]] = []
     for source in _sources(workspace, source_ids):
-        path = workspace / str(source.get("chunks_path", ""))
+        path = resolve_workspace_path(workspace, str(source.get("chunks_path", "")))
         if path.exists():
             chunks.extend(read_jsonl(path))
     return chunks
@@ -65,7 +65,10 @@ def _selected_ids(args: Dict[str, Any]):
 def study_guide_generate(args: Dict[str, Any]) -> Dict[str, Any]:
     workspace = _workspace(args)
     source_ids = _selected_ids(args)
-    chunks = _chunks(workspace, source_ids)
+    try:
+        chunks = _chunks(workspace, source_ids)
+    except ValueError as exc:
+        return failure(str(exc))
     if not chunks:
         return failure("No notebook sources found. Import sources with source_import first.")
     focus = str(args.get("focus") or "notebook").strip()
@@ -84,7 +87,10 @@ def study_guide_generate(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def faq_generate(args: Dict[str, Any]) -> Dict[str, Any]:
     workspace = _workspace(args)
-    chunks = _chunks(workspace, _selected_ids(args))
+    try:
+        chunks = _chunks(workspace, _selected_ids(args))
+    except ValueError as exc:
+        return failure(str(exc))
     if not chunks:
         return failure("No notebook sources found. Import sources with source_import first.")
     lines = ["# FAQ", ""]
@@ -101,7 +107,10 @@ def faq_generate(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def quiz_generate(args: Dict[str, Any]) -> Dict[str, Any]:
     workspace = _workspace(args)
-    chunks = _chunks(workspace, _selected_ids(args))
+    try:
+        chunks = _chunks(workspace, _selected_ids(args))
+    except ValueError as exc:
+        return failure(str(exc))
     if not chunks:
         return failure("No notebook sources found. Import sources with source_import first.")
     lines = ["# Quiz", ""]
@@ -116,7 +125,10 @@ def quiz_generate(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def flashcards_generate(args: Dict[str, Any]) -> Dict[str, Any]:
     workspace = _workspace(args)
-    chunks = _chunks(workspace, _selected_ids(args))
+    try:
+        chunks = _chunks(workspace, _selected_ids(args))
+    except ValueError as exc:
+        return failure(str(exc))
     if not chunks:
         return failure("No notebook sources found. Import sources with source_import first.")
     lines = ["# Flashcards", ""]

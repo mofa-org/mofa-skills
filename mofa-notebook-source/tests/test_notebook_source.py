@@ -102,6 +102,25 @@ class NotebookSourceTests(unittest.TestCase):
             chunks = (workspace / "notebook-sources/notes/chunks.jsonl").read_text(encoding="utf-8")
             self.assertIn("new searchable text", chunks)
 
+    def test_source_normalize_rejects_manifest_path_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "uploads").mkdir()
+            (workspace / "uploads" / "notes.md").write_text("# Notes\n\nsafe text", encoding="utf-8")
+            handle_tool(
+                "source_import",
+                {"workspace": str(workspace), "path": "uploads/notes.md", "title": "Notes"},
+            )
+            manifest_path = workspace / "notebook-sources" / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["sources"][0]["source_path"] = "../outside.md"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            result = handle_tool("source_normalize", {"workspace": str(workspace), "source_id": "notes"})
+
+            self.assertFalse(result["success"])
+            self.assertIn("must not contain '..'", result["output"])
+
     def test_source_import_reports_unsupported_binary_formats(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
