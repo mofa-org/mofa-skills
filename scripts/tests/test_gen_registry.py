@@ -19,6 +19,7 @@ class RegistryGenerationTests(unittest.TestCase):
         skills = registry[0]["skills"]
 
         self.assertIn("mofa-slides", skills)
+        self.assertIn("notebook_common", skills)
         self.assertIn("mofa-notebook-source", skills)
         self.assertIn("mofa-notebook-video-overview", skills)
         self.assertNotIn("notebook-source", skills)

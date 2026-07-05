@@ -17,10 +17,18 @@ if not meta_path.exists():
 
 meta = json.loads(meta_path.read_text())
 exclude = set(meta.pop("exclude_skills", []))
+include_skill_dirs = list(meta.pop("include_skill_dirs", []))
 
 # Discover skills from directories containing manifest.json or SKILL.md
 skills = []
 requires_bins = set()
+for skill_dir in include_skill_dirs:
+    skill_path = root / skill_dir
+    if not skill_path.is_dir():
+        print(f"ERROR: included skill directory not found: {skill_dir}", file=sys.stderr)
+        sys.exit(1)
+    skills.append(skill_dir)
+
 for skill_path in sorted(root.glob("mofa-*/")):
     skill_dir = skill_path.name
     if skill_dir in exclude:
@@ -40,6 +48,7 @@ for skill_path in sorted(root.glob("mofa-*/")):
     else:
         name = skill_dir
     skills.append(name)
+skills = sorted(dict.fromkeys(skills))
 
 # Merge requires: base + per-skill bins
 base_requires = list(meta.get("requires", []))

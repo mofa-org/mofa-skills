@@ -6,6 +6,9 @@
   "exclude_skills": [
     "mofa-cli"
   ],
+  "include_skill_dirs": [
+    "notebook_common"
+  ],
   "requires": ["git", "cargo"],
   "tags": [
     "ai", "pptx", "image-gen", "gemini", "batch-api",
