@@ -18,7 +18,7 @@ files without spending video-generation quota.
 
 Optional inputs include `title`, `style`, `duration_minutes`, `source_ids`,
 `language`, `provider`, `model`, `video_model`, `video_duration_seconds`,
-`video_aspect_ratio`, and `video_resolution`.
+`video_aspect_ratio`, `video_resolution`, `video_provider`, and `video_output_gcs_uri`.
 
 ## Runtime
 
@@ -33,7 +33,17 @@ The planning step uses the shared notebook LLM configuration: `GEMINI_API_KEY`,
 `MOFA_NOTEBOOK_MODEL`; `MOFA_DATA_TABLE_PROVIDER` and
 `MOFA_DATA_TABLE_MODEL` remain accepted for compatibility.
 
-The rendering step uses Gemini API Veo and requires `GEMINI_API_KEY`. It uses
-`veo-3.1-generate-preview` by default; override with `video_model`,
-`MOFA_NOTEBOOK_VIDEO_MODEL`, or `MOFA_VEO_MODEL`. `GEMINI_BASE_URL` may point to
-a compatible test endpoint.
+The rendering step supports Gemini API Veo or Vertex Veo. Gemini API rendering
+uses `GEMINI_API_KEY` and defaults to `veo-3.1-generate-preview`. Vertex
+rendering uses `GOOGLE_APPLICATION_CREDENTIALS`, `VERTEX_SA_JSON`,
+`VERTEX_ACCESS_TOKEN`, or `GOOGLE_OAUTH_ACCESS_TOKEN`; it also needs
+`GOOGLE_CLOUD_PROJECT` unless the service account JSON includes `project_id`,
+and defaults to `GOOGLE_CLOUD_LOCATION=us-central1` with
+`veo-3.1-generate-001`. Override with `video_provider`,
+`MOFA_NOTEBOOK_VIDEO_PROVIDER`, `MOFA_VEO_PROVIDER`, `video_model`,
+`MOFA_NOTEBOOK_VIDEO_MODEL`, or `MOFA_VEO_MODEL`.
+
+For Vertex, `video_output_gcs_uri`, `MOFA_VEO_OUTPUT_GCS_URI`, or
+`VERTEX_OUTPUT_GCS_URI` may point to a `gs://...` output prefix. The configured
+credential must be able to read the generated MP4 so the skill can attach
+`overview.mp4` locally.

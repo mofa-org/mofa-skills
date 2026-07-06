@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "mofa-notebook-source" / "src"))
 sys.path.insert(0, str(ROOT / "mofa-notebook-video-overview" / "src"))
 
 from notebook_source import handle_tool as source_tool
-from notebook_video_overview import GeminiVeoClient, create_video_client, handle_tool, video_overview_generate
+from notebook_video_overview import GeminiVeoClient, VertexVeoClient, create_video_client, handle_tool, video_overview_generate
 
 
 class FakeLlmClient:
@@ -230,6 +230,55 @@ class NotebookVideoOverviewTests(unittest.TestCase):
             self.assertEqual(calls[0]["payload"]["parameters"]["durationSeconds"], "8")
             self.assertEqual(calls[-1]["headers"]["x-goog-api-key"], "key")
 
+    def test_vertex_veo_client_starts_polls_and_downloads_gcs_video(self):
+        calls = []
+
+        def transport(url, headers, payload, method):
+            calls.append({"url": url, "headers": headers, "payload": payload, "method": method})
+            if method == "POST" and url.endswith(":predictLongRunning"):
+                self.assertEqual(headers["Authorization"], "Bearer vertex-token")
+                self.assertEqual(payload["parameters"]["storageUri"], "gs://video-bucket/out/")
+                self.assertEqual(payload["parameters"]["sampleCount"], 1)
+                return 200, json.dumps({"name": "projects/proj/locations/us-central1/operations/abc"}).encode("utf-8")
+            if method == "POST" and url.endswith(":fetchPredictOperation"):
+                self.assertEqual(payload["operationName"], "projects/proj/locations/us-central1/operations/abc")
+                return 200, json.dumps({
+                    "done": True,
+                    "response": {
+                        "videos": [{"gcsUri": "gs://video-bucket/out/sample_0.mp4", "mimeType": "video/mp4"}]
+                    },
+                }).encode("utf-8")
+            if method == "GET" and url == "https://storage.googleapis.com/storage/v1/b/video-bucket/o/out%2Fsample_0.mp4?alt=media":
+                self.assertEqual(headers["Authorization"], "Bearer vertex-token")
+                return 200, b"vertex-video-bytes"
+            raise AssertionError(f"unexpected request {method} {url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "overview.mp4"
+            client = VertexVeoClient(
+                {"client_email": "test@example.test", "private_key": "unused", "project_id": "proj"},
+                access_token_provider=lambda _: "vertex-token",
+                model="veo-3.1-generate-001",
+                location="us-central1",
+                transport=transport,
+            )
+            metadata = client.generate_video(
+                "make a video",
+                output,
+                duration_seconds=8,
+                aspect_ratio="16:9",
+                resolution="720p",
+                poll_interval_secs=1,
+                timeout_secs=5,
+                output_gcs_uri="gs://video-bucket/out/",
+            )
+
+            self.assertEqual(output.read_bytes(), b"vertex-video-bytes")
+            self.assertEqual(metadata["provider"], "vertex")
+            self.assertEqual(metadata["model"], "veo-3.1-generate-001")
+            self.assertEqual(metadata["video_uri"], "gs://video-bucket/out/sample_0.mp4")
+            self.assertTrue(calls[0]["url"].endswith("/publishers/google/models/veo-3.1-generate-001:predictLongRunning"))
+
     def test_create_video_client_uses_notebook_video_model_override(self):
         client = create_video_client(
             {},
@@ -243,6 +292,22 @@ class NotebookVideoOverviewTests(unittest.TestCase):
 
         self.assertEqual(client.model, "custom-veo")
         self.assertEqual(client.base_url, "https://example.test/v1beta")
+
+    def test_create_video_client_uses_vertex_when_vertex_credentials_are_configured(self):
+        client = create_video_client(
+            {},
+            env={
+                "VERTEX_ACCESS_TOKEN": "vertex-token",
+                "GOOGLE_CLOUD_PROJECT": "proj",
+                "GOOGLE_CLOUD_LOCATION": "us-central1",
+            },
+            transport=lambda *args: (200, b"{}"),
+        )
+
+        self.assertIsInstance(client, VertexVeoClient)
+        self.assertEqual(client.model, "veo-3.1-generate-001")
+        self.assertEqual(client.project, "proj")
+        self.assertEqual(client.location, "us-central1")
 
     def test_empty_manifest_returns_clear_error_before_model_call(self):
         with tempfile.TemporaryDirectory() as tmp:

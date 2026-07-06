@@ -55,7 +55,7 @@
           },
           "video_model": {
             "type": "string",
-            "description": "Optional Veo model override. Defaults to veo-3.1-generate-preview."
+            "description": "Optional Veo model override. Defaults to veo-3.1-generate-preview for Gemini API and veo-3.1-generate-001 for Vertex."
           },
           "video_duration_seconds": {
             "type": "integer",
@@ -101,6 +101,18 @@
               "dont_allow"
             ],
             "description": "Optional Veo personGeneration policy."
+          },
+          "video_provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "vertex"
+            ],
+            "description": "Optional video rendering provider override. Defaults to Vertex when Vertex credentials are present, otherwise Gemini API."
+          },
+          "video_output_gcs_uri": {
+            "type": "string",
+            "description": "Optional Vertex output GCS prefix, for example gs://bucket/path/. The service account or access token must be able to read the rendered MP4."
           }
         },
         "x-octos-host-config-keys": [
@@ -124,7 +136,11 @@
         "MOFA_DATA_TABLE_PROVIDER",
         "MOFA_DATA_TABLE_MODEL",
         "MOFA_NOTEBOOK_VIDEO_MODEL",
-        "MOFA_VEO_MODEL"
+        "MOFA_VEO_MODEL",
+        "MOFA_NOTEBOOK_VIDEO_PROVIDER",
+        "MOFA_VEO_PROVIDER",
+        "MOFA_VEO_OUTPUT_GCS_URI",
+        "VERTEX_OUTPUT_GCS_URI"
       ],
       "concurrency_class": "exclusive"
     }

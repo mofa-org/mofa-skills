@@ -5,9 +5,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from notebook_common.llm_client import create_llm_client
+from notebook_common.llm_client import (
+    DEFAULT_VERTEX_LOCATION,
+    _load_service_account,
+    _service_account_access_token,
+    _vertex_base_url,
+    create_llm_client,
+)
 from notebook_common.output import read_jsonl
 from notebook_common.paths import resolve_workspace_path, workspace_from_args
 from notebook_common.sources import load_manifest, slugify
@@ -16,6 +22,7 @@ from notebook_common.sources import load_manifest, slugify
 Transport = Callable[[str, Dict[str, str], Optional[Dict[str, Any]], str], Tuple[int, bytes]]
 
 DEFAULT_VEO_MODEL = "veo-3.1-generate-preview"
+DEFAULT_VERTEX_VEO_MODEL = "veo-3.1-generate-001"
 DEFAULT_VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 
@@ -65,7 +72,10 @@ class GeminiVeoClient:
         self.base_url = base_url.rstrip("/")
         self.transport = transport
         if not self.api_key:
-            raise ValueError("GEMINI_API_KEY is required to render a Veo video. Pass render_video=false to create only the grounded plan.")
+            raise ValueError(
+                "GEMINI_API_KEY is required for Gemini API video rendering. "
+                "Set video_provider=vertex to render with Vertex, or pass render_video=false to create only the grounded plan."
+            )
 
     def generate_video(
         self,
@@ -78,6 +88,7 @@ class GeminiVeoClient:
         poll_interval_secs: int = 10,
         timeout_secs: int = 420,
         person_generation: Optional[str] = None,
+        output_gcs_uri: Optional[str] = None,
     ) -> Dict[str, Any]:
         model = urllib.parse.quote(self.model, safe="")
         start_url = f"{self.base_url}/models/{model}:predictLongRunning"
@@ -127,6 +138,7 @@ class GeminiVeoClient:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(video_bytes)
         return {
+            "provider": "gemini",
             "operation_name": operation_name,
             "model": self.model,
             "duration_seconds": duration_seconds,
@@ -151,18 +163,262 @@ class GeminiVeoClient:
         return uri
 
 
-def create_video_client(args: Dict[str, Any], env: Optional[Dict[str, str]] = None, transport: Transport = _http_transport) -> GeminiVeoClient:
+class VertexVeoClient:
+    def __init__(
+        self,
+        service_account: Mapping[str, Any],
+        access_token_provider: Callable[[Mapping[str, Any]], str] = _service_account_access_token,
+        model: str = DEFAULT_VERTEX_VEO_MODEL,
+        location: str = DEFAULT_VERTEX_LOCATION,
+        project: Optional[str] = None,
+        base_url: Optional[str] = None,
+        transport: Transport = _http_transport,
+    ):
+        self.service_account = dict(service_account)
+        self.access_token_provider = access_token_provider
+        self.model = model.strip() or DEFAULT_VERTEX_VEO_MODEL
+        self.location = location.strip() or DEFAULT_VERTEX_LOCATION
+        self.project = project or str(self.service_account.get("project_id") or "").strip()
+        if not self.project:
+            raise ValueError(
+                "Vertex project is required for video rendering. Set GOOGLE_CLOUD_PROJECT or include project_id in the service account JSON."
+            )
+        self.base_url = _vertex_base_url(self.location, base_url)
+        self.transport = transport
+
+    def generate_video(
+        self,
+        prompt: str,
+        output_path: Path,
+        *,
+        duration_seconds: int = 8,
+        aspect_ratio: str = "16:9",
+        resolution: str = "720p",
+        poll_interval_secs: int = 10,
+        timeout_secs: int = 420,
+        person_generation: Optional[str] = None,
+        output_gcs_uri: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        operation_name = ""
+        access_token = self.access_token_provider(self.service_account)
+        headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+        parameters: Dict[str, Any] = {
+            "sampleCount": 1,
+            "durationSeconds": duration_seconds,
+            "aspectRatio": aspect_ratio,
+            "resolution": resolution,
+        }
+        if person_generation:
+            parameters["personGeneration"] = self._person_generation(person_generation)
+        if output_gcs_uri:
+            parameters["storageUri"] = output_gcs_uri
+        payload = {"instances": [{"prompt": prompt}], "parameters": parameters}
+        status, body = self.transport(self._model_url("predictLongRunning"), headers, payload, "POST")
+        if status >= 400:
+            raise RuntimeError(f"Vertex Veo request failed with HTTP {status}.")
+        operation = _json_response(body, "Vertex Veo start operation")
+        self._raise_operation_error(operation)
+        operation_name = str(operation.get("name") or "").strip()
+        if not operation_name:
+            raise RuntimeError("Vertex Veo start operation did not return an operation name.")
+
+        deadline = time.monotonic() + max(1, timeout_secs)
+        last_status = operation
+        while not bool(last_status.get("done")):
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for Vertex Veo operation {operation_name}.")
+            time.sleep(max(1, poll_interval_secs))
+            status, body = self.transport(
+                self._model_url("fetchPredictOperation"),
+                headers,
+                {"operationName": operation_name},
+                "POST",
+            )
+            if status >= 400:
+                raise RuntimeError(f"Vertex Veo status request failed with HTTP {status}.")
+            last_status = _json_response(body, "Vertex Veo status operation")
+            self._raise_operation_error(last_status)
+
+        video_uri = self._write_video(last_status, output_path, access_token)
+        return {
+            "provider": "vertex",
+            "operation_name": operation_name,
+            "model": self.model,
+            "project": self.project,
+            "location": self.location,
+            "duration_seconds": duration_seconds,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "video_uri": video_uri,
+        }
+
+    def _model_url(self, action: str) -> str:
+        project = urllib.parse.quote(self.project, safe="")
+        location = urllib.parse.quote(self.location, safe="")
+        model = urllib.parse.quote(self.model, safe="")
+        return (
+            f"{self.base_url}/projects/{project}/locations/{location}"
+            f"/publishers/google/models/{model}:{action}"
+        )
+
+    def _person_generation(self, value: str) -> str:
+        if value == "dont_allow":
+            return "disallow"
+        if value == "allow_all":
+            return "allow_adult"
+        return value
+
+    def _raise_operation_error(self, operation: Dict[str, Any]) -> None:
+        if isinstance(operation.get("error"), dict):
+            error = operation["error"]
+            raise RuntimeError(f"Vertex Veo operation failed: {error.get('message') or error}")
+
+    def _write_video(self, operation: Dict[str, Any], output_path: Path, access_token: str) -> str:
+        video = self._video_entry(operation)
+        inline = self._inline_video_bytes(video)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        if inline:
+            output_path.write_bytes(inline)
+            return "inline-video-bytes"
+
+        uri = self._video_uri(video)
+        download_url = self._download_url(uri)
+        headers: Dict[str, str] = {}
+        if uri.startswith("gs://") or "storage.googleapis.com" in download_url:
+            headers["Authorization"] = f"Bearer {access_token}"
+        status, video_bytes = self.transport(download_url, headers, None, "GET")
+        if status >= 400:
+            raise RuntimeError(f"Vertex Veo video download failed with HTTP {status}.")
+        if not video_bytes:
+            raise RuntimeError("Vertex Veo video download returned an empty file.")
+        output_path.write_bytes(video_bytes)
+        return uri
+
+    def _video_entry(self, operation: Dict[str, Any]) -> Dict[str, Any]:
+        response = operation.get("response")
+        if not isinstance(response, dict):
+            raise RuntimeError("Vertex Veo operation completed without a response object.")
+        videos = response.get("videos")
+        if isinstance(videos, list) and videos and isinstance(videos[0], dict):
+            return videos[0]
+        samples = response.get("generateVideoResponse", {}).get("generatedSamples") if isinstance(response.get("generateVideoResponse"), dict) else None
+        if isinstance(samples, list) and samples and isinstance(samples[0], dict):
+            nested = samples[0].get("video")
+            if isinstance(nested, dict):
+                return nested
+        raise RuntimeError("Vertex Veo operation completed without a generated video.")
+
+    def _inline_video_bytes(self, video: Dict[str, Any]) -> Optional[bytes]:
+        import base64
+
+        for key in ("bytesBase64Encoded", "bytesBase64", "videoBytes", "videoBytesBase64"):
+            value = video.get(key)
+            if isinstance(value, str) and value.strip():
+                try:
+                    return base64.b64decode(value)
+                except Exception as exc:
+                    raise RuntimeError(f"Vertex Veo returned invalid base64 video bytes in {key}.") from exc
+        return None
+
+    def _video_uri(self, video: Dict[str, Any]) -> str:
+        uri = str(video.get("gcsUri") or video.get("uri") or "").strip()
+        if not uri and isinstance(video.get("video"), dict):
+            uri = str(video["video"].get("uri") or "").strip()
+        if not uri:
+            raise RuntimeError("Vertex Veo operation returned no downloadable video URI or inline bytes.")
+        return uri
+
+    def _download_url(self, uri: str) -> str:
+        if not uri.startswith("gs://"):
+            return uri
+        bucket_and_object = uri[5:]
+        bucket, sep, object_name = bucket_and_object.partition("/")
+        if not sep or not bucket or not object_name:
+            raise RuntimeError(f"Invalid Vertex Veo GCS URI: {uri}")
+        bucket_enc = urllib.parse.quote(bucket, safe="")
+        object_enc = urllib.parse.quote(object_name, safe="")
+        return f"https://storage.googleapis.com/storage/v1/b/{bucket_enc}/o/{object_enc}?alt=media"
+
+
+def create_video_client(
+    args: Dict[str, Any],
+    env: Optional[Mapping[str, str]] = None,
+    transport: Transport = _http_transport,
+    access_token_provider: Callable[[Mapping[str, Any]], str] = _service_account_access_token,
+):
     values = os.environ if env is None else env
-    model = str(
+    provider = str(
+        args.get("video_provider")
+        or args.get("veo_provider")
+        or values.get("MOFA_NOTEBOOK_VIDEO_PROVIDER")
+        or values.get("MOFA_VEO_PROVIDER")
+        or ""
+    ).strip().lower()
+    if not provider:
+        planning_provider = str(args.get("provider") or "").strip().lower()
+        if planning_provider in {"gemini", "vertex"}:
+            provider = planning_provider
+    gemini_key = str(values.get("GEMINI_API_KEY") or "").strip()
+    vertex_credentials = str(
+        values.get("GOOGLE_APPLICATION_CREDENTIALS") or values.get("VERTEX_SA_JSON") or ""
+    ).strip()
+    vertex_access_token = str(
+        values.get("VERTEX_ACCESS_TOKEN")
+        or values.get("GOOGLE_OAUTH_ACCESS_TOKEN")
+        or ""
+    ).strip()
+    if not provider:
+        if vertex_credentials or vertex_access_token:
+            provider = "vertex"
+        elif gemini_key:
+            provider = "gemini"
+        else:
+            raise ValueError(
+                "No supported Veo credential is configured. Set GEMINI_API_KEY for Gemini API, "
+                "or GOOGLE_APPLICATION_CREDENTIALS, VERTEX_SA_JSON, VERTEX_ACCESS_TOKEN, or GOOGLE_OAUTH_ACCESS_TOKEN for Vertex."
+            )
+    if provider not in {"gemini", "vertex"}:
+        raise ValueError(f"Unsupported notebook video provider: {provider}")
+
+    model_override = str(
         args.get("video_model")
         or values.get("MOFA_NOTEBOOK_VIDEO_MODEL")
         or values.get("MOFA_VEO_MODEL")
-        or DEFAULT_VEO_MODEL
-    )
-    return GeminiVeoClient(
-        api_key=str(values.get("GEMINI_API_KEY") or ""),
-        model=model,
-        base_url=str(values.get("GEMINI_BASE_URL") or DEFAULT_VEO_BASE_URL),
+        or ""
+    ).strip()
+    if provider == "gemini":
+        return GeminiVeoClient(
+            api_key=gemini_key,
+            model=model_override or DEFAULT_VEO_MODEL,
+            base_url=str(values.get("GEMINI_BASE_URL") or DEFAULT_VEO_BASE_URL),
+            transport=transport,
+        )
+
+    if vertex_access_token:
+        service_account = {
+            "client_email": "access-token@local",
+            "private_key": "unused",
+            "project_id": str(values.get("GOOGLE_CLOUD_PROJECT") or "").strip(),
+        }
+        token_provider = lambda _: vertex_access_token
+    else:
+        if not vertex_credentials:
+            raise ValueError(
+                "GOOGLE_APPLICATION_CREDENTIALS, VERTEX_SA_JSON, VERTEX_ACCESS_TOKEN, or GOOGLE_OAUTH_ACCESS_TOKEN is required for video_provider='vertex'."
+            )
+        service_account = _load_service_account(vertex_credentials)
+        token_provider = access_token_provider
+    return VertexVeoClient(
+        service_account=service_account,
+        access_token_provider=token_provider,
+        model=model_override or DEFAULT_VERTEX_VEO_MODEL,
+        location=str(
+            values.get("GOOGLE_CLOUD_LOCATION")
+            or values.get("VERTEX_LOCATION")
+            or DEFAULT_VERTEX_LOCATION
+        ),
+        project=str(values.get("GOOGLE_CLOUD_PROJECT") or "").strip() or None,
+        base_url=str(values.get("VERTEX_BASE_URL") or "").strip() or None,
         transport=transport,
     )
 
@@ -448,7 +704,14 @@ def _video_generation_params(args: Dict[str, Any]) -> Dict[str, Any]:
         person_generation = str(person_generation).strip()
         if person_generation not in {"allow_all", "allow_adult", "dont_allow"}:
             raise ValueError("person_generation must be allow_all, allow_adult, or dont_allow.")
-    return {
+    output_gcs_uri = str(
+        args.get("video_output_gcs_uri")
+        or args.get("output_gcs_uri")
+        or os.environ.get("MOFA_VEO_OUTPUT_GCS_URI")
+        or os.environ.get("VERTEX_OUTPUT_GCS_URI")
+        or ""
+    ).strip()
+    params = {
         "duration_seconds": duration_seconds,
         "aspect_ratio": aspect_ratio,
         "resolution": resolution,
@@ -456,6 +719,9 @@ def _video_generation_params(args: Dict[str, Any]) -> Dict[str, Any]:
         "timeout_secs": timeout,
         "person_generation": person_generation or None,
     }
+    if output_gcs_uri:
+        params["output_gcs_uri"] = output_gcs_uri
+    return params
 
 
 def _build_veo_prompt(overview: Dict[str, Any], video_params: Dict[str, Any]) -> str:
