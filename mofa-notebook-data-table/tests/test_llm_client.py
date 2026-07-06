@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "notebook_common"))
 sys.path.insert(0, str(ROOT / "mofa-notebook-data-table" / "src"))
 
 
@@ -187,6 +188,20 @@ class LlmClientTests(unittest.TestCase):
         )
         self.assertIsInstance(client, module.OpenAIClient)
         self.assertEqual(client.model, "env-model")
+
+        notebook_client = module.create_llm_client(
+            {},
+            env={
+                "MOFA_NOTEBOOK_PROVIDER": "openai",
+                "MOFA_NOTEBOOK_MODEL": "notebook-model",
+                "MOFA_DATA_TABLE_PROVIDER": "gemini",
+                "GEMINI_API_KEY": "gemini-secret",
+                "OPENAI_API_KEY": "openai-secret",
+            },
+            transport=RecordingTransport({}),
+        )
+        self.assertIsInstance(notebook_client, module.OpenAIClient)
+        self.assertEqual(notebook_client.model, "notebook-model")
 
     def test_factory_uses_vertex_service_account_credentials(self):
         module = self.module()
