@@ -1,3 +1,6 @@
+import json
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -186,6 +189,29 @@ class NotebookStudyTests(unittest.TestCase):
 
             self.assertFalse(result["success"])
             self.assertIn("No notebook sources", result["output"])
+
+    def test_main_runs_when_installed_without_repo_common(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            installed_skill = root / "installed-skills" / "mofa-notebook-study"
+            installed_skill.parent.mkdir()
+            shutil.copytree(ROOT / "mofa-notebook-study", installed_skill)
+
+            completed = subprocess.run(
+                [str(installed_skill / "main"), "study_guide_generate"],
+                input=json.dumps({"workspace": str(workspace)}),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 1)
+            result = json.loads(completed.stdout)
+            self.assertFalse(result["success"])
+            self.assertIn("No notebook sources", result["output"])
+            self.assertEqual(completed.stderr, "")
 
 
 if __name__ == "__main__":
