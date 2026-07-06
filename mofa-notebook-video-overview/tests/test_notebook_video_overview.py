@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "mofa-notebook-source" / "src"))
 sys.path.insert(0, str(ROOT / "mofa-notebook-video-overview" / "src"))
 
 from notebook_source import handle_tool as source_tool
-from notebook_video_overview import handle_tool, video_overview_generate
+from notebook_video_overview import GeminiVeoClient, create_video_client, handle_tool, video_overview_generate
 
 
 class FakeLlmClient:
@@ -23,6 +23,22 @@ class FakeLlmClient:
     def generate(self, prompt, schema):
         self.calls.append({"prompt": prompt, "schema": schema})
         return self.response
+
+
+class FakeVideoClient:
+    def __init__(self):
+        self.calls = []
+
+    def generate_video(self, prompt, output_path, **params):
+        self.calls.append({"prompt": prompt, "output_path": output_path, "params": params})
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"fake mp4 bytes")
+        return {
+            "operation_name": "operations/fake-video",
+            "model": "veo-3.1-generate-preview",
+            **params,
+            "video_uri": "https://example.test/fake.mp4",
+        }
 
 
 class NotebookVideoOverviewTests(unittest.TestCase):
@@ -85,24 +101,31 @@ class NotebookVideoOverviewTests(unittest.TestCase):
         tmp, workspace = self.make_workspace()
         self.addCleanup(tmp.cleanup)
         llm = FakeLlmClient(self.overview_response())
+        video = FakeVideoClient()
 
         result = video_overview_generate(
             {"workspace": str(workspace), "title": "Market Brief", "duration_minutes": 3, "style": "executive"},
             llm_client=llm,
+            video_client=video,
         )
 
         self.assertTrue(result["success"], result)
         self.assertEqual(len(llm.calls), 1)
+        self.assertEqual(len(video.calls), 1)
         self.assertIn("Generate a source-grounded video overview", llm.calls[0]["prompt"])
         self.assertIn("market-report#chunk-0001", llm.calls[0]["prompt"])
         script = workspace / result["data"]["script_path"]
         scenes = workspace / result["data"]["scene_plan_path"]
         brief = workspace / result["data"]["asset_brief_path"]
         handoff = workspace / result["data"]["handoff_path"]
+        video_path = workspace / result["data"]["video_path"]
+        veo_prompt = workspace / result["data"]["veo_prompt_path"]
         self.assertTrue(script.is_file())
         self.assertTrue(scenes.is_file())
         self.assertTrue(brief.is_file())
         self.assertTrue(handoff.is_file())
+        self.assertTrue(video_path.is_file())
+        self.assertTrue(veo_prompt.is_file())
         self.assertIn("Revenue grew in enterprise accounts", script.read_text(encoding="utf-8"))
         self.assertIn("Market Report (notebook-sources/market-report/source.md:", script.read_text(encoding="utf-8"))
         scene_data = json.loads(scenes.read_text(encoding="utf-8"))
@@ -110,7 +133,9 @@ class NotebookVideoOverviewTests(unittest.TestCase):
         self.assertEqual(scene_data["scenes"][1]["type"], "risk")
         self.assertIn("mofa-slides", handoff.read_text(encoding="utf-8"))
         self.assertIn("mofa-fm", handoff.read_text(encoding="utf-8"))
+        self.assertIn("Revenue grew in enterprise accounts", veo_prompt.read_text(encoding="utf-8"))
         self.assertIn(str(script.resolve()), result["files_to_send"])
+        self.assertIn(str(video_path.resolve()), result["files_to_send"])
 
     def test_video_overview_generate_honors_selected_sources_in_llm_prompt(self):
         tmp, workspace = self.make_workspace()
@@ -133,7 +158,7 @@ class NotebookVideoOverviewTests(unittest.TestCase):
             }
         )
 
-        result = video_overview_generate({"workspace": str(workspace), "source_ids": ["notes"]}, llm_client=llm)
+        result = video_overview_generate({"workspace": str(workspace), "source_ids": ["notes"], "render_video": False}, llm_client=llm)
 
         self.assertTrue(result["success"], result)
         self.assertIn("notes#chunk-0001", llm.calls[0]["prompt"])
@@ -148,6 +173,76 @@ class NotebookVideoOverviewTests(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertIn("cites unknown chunk", result["output"])
+
+    def test_render_video_false_writes_plan_without_calling_video_client(self):
+        tmp, workspace = self.make_workspace()
+        self.addCleanup(tmp.cleanup)
+        llm = FakeLlmClient(self.overview_response())
+        video = FakeVideoClient()
+
+        result = video_overview_generate(
+            {"workspace": str(workspace), "render_video": False},
+            llm_client=llm,
+            video_client=video,
+        )
+
+        self.assertTrue(result["success"], result)
+        self.assertFalse(result["data"]["render_video"])
+        self.assertNotIn("video_path", result["data"])
+        self.assertEqual(video.calls, [])
+
+    def test_gemini_veo_client_starts_polls_and_downloads_video(self):
+        calls = []
+
+        def transport(url, headers, payload, method):
+            calls.append({"url": url, "headers": headers, "payload": payload, "method": method})
+            if method == "POST":
+                return 200, json.dumps({"name": "models/veo-3.1-generate-preview/operations/abc"}).encode("utf-8")
+            if method == "GET" and url.endswith("operations/abc"):
+                return 200, json.dumps({
+                    "done": True,
+                    "response": {
+                        "generateVideoResponse": {
+                            "generatedSamples": [{"video": {"uri": "https://files.example/video.mp4"}}]
+                        }
+                    },
+                }).encode("utf-8")
+            if method == "GET" and url == "https://files.example/video.mp4":
+                return 200, b"video-bytes"
+            raise AssertionError(f"unexpected request {method} {url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "overview.mp4"
+            client = GeminiVeoClient("key", base_url="https://generativelanguage.googleapis.com/v1beta", transport=transport)
+            metadata = client.generate_video(
+                "make a video",
+                output,
+                duration_seconds=8,
+                aspect_ratio="9:16",
+                resolution="720p",
+                poll_interval_secs=1,
+                timeout_secs=5,
+            )
+
+            self.assertEqual(output.read_bytes(), b"video-bytes")
+            self.assertEqual(metadata["operation_name"], "models/veo-3.1-generate-preview/operations/abc")
+            self.assertEqual(calls[0]["payload"]["parameters"]["aspectRatio"], "9:16")
+            self.assertEqual(calls[0]["payload"]["parameters"]["durationSeconds"], "8")
+            self.assertEqual(calls[-1]["headers"]["x-goog-api-key"], "key")
+
+    def test_create_video_client_uses_notebook_video_model_override(self):
+        client = create_video_client(
+            {},
+            env={
+                "GEMINI_API_KEY": "key",
+                "MOFA_NOTEBOOK_VIDEO_MODEL": "custom-veo",
+                "GEMINI_BASE_URL": "https://example.test/v1beta",
+            },
+            transport=lambda *args: (200, b"{}"),
+        )
+
+        self.assertEqual(client.model, "custom-veo")
+        self.assertEqual(client.base_url, "https://example.test/v1beta")
 
     def test_empty_manifest_returns_clear_error_before_model_call(self):
         with tempfile.TemporaryDirectory() as tmp:

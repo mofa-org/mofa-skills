@@ -1,11 +1,170 @@
 import json
+import os
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from notebook_common.llm_client import create_llm_client
 from notebook_common.output import read_jsonl
 from notebook_common.paths import resolve_workspace_path, workspace_from_args
 from notebook_common.sources import load_manifest, slugify
+
+
+Transport = Callable[[str, Dict[str, str], Optional[Dict[str, Any]], str], Tuple[int, bytes]]
+
+DEFAULT_VEO_MODEL = "veo-3.1-generate-preview"
+DEFAULT_VEO_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+
+def _http_transport(
+    url: str,
+    headers: Dict[str, str],
+    payload: Optional[Dict[str, Any]],
+    method: str,
+) -> Tuple[int, bytes]:
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request_headers = dict(headers)
+    if payload is not None:
+        request_headers.setdefault("Content-Type", "application/json")
+    request = urllib.request.Request(url, data=data, headers=request_headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return int(response.status), response.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read()
+        raise RuntimeError(
+            f"Veo request failed with HTTP {exc.code}: {detail.decode('utf-8', errors='replace')[:500]}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Veo request failed: {exc.reason}") from exc
+
+
+def _json_response(body: bytes, context: str) -> Dict[str, Any]:
+    try:
+        parsed = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{context} returned invalid JSON.") from exc
+    if not isinstance(parsed, dict):
+        raise RuntimeError(f"{context} returned a non-object response.")
+    return parsed
+
+
+class GeminiVeoClient:
+    def __init__(
+        self,
+        api_key: str,
+        model: str = DEFAULT_VEO_MODEL,
+        base_url: str = DEFAULT_VEO_BASE_URL,
+        transport: Transport = _http_transport,
+    ):
+        self.api_key = api_key.strip()
+        self.model = model.strip() or DEFAULT_VEO_MODEL
+        self.base_url = base_url.rstrip("/")
+        self.transport = transport
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY is required to render a Veo video. Pass render_video=false to create only the grounded plan.")
+
+    def generate_video(
+        self,
+        prompt: str,
+        output_path: Path,
+        *,
+        duration_seconds: int = 8,
+        aspect_ratio: str = "16:9",
+        resolution: str = "720p",
+        poll_interval_secs: int = 10,
+        timeout_secs: int = 420,
+        person_generation: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        model = urllib.parse.quote(self.model, safe="")
+        start_url = f"{self.base_url}/models/{model}:predictLongRunning"
+        parameters: Dict[str, Any] = {
+            "numberOfVideos": 1,
+            "durationSeconds": str(duration_seconds),
+            "aspectRatio": aspect_ratio,
+            "resolution": resolution,
+        }
+        if person_generation:
+            parameters["personGeneration"] = person_generation
+        payload = {"instances": [{"prompt": prompt}], "parameters": parameters}
+        status, body = self.transport(
+            start_url,
+            {"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
+            payload,
+            "POST",
+        )
+        if status >= 400:
+            raise RuntimeError(f"Veo request failed with HTTP {status}.")
+        operation = _json_response(body, "Veo start operation")
+        operation_name = str(operation.get("name") or "").strip()
+        if not operation_name:
+            raise RuntimeError("Veo start operation did not return an operation name.")
+
+        deadline = time.monotonic() + max(1, timeout_secs)
+        last_status = operation
+        while not bool(last_status.get("done")):
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for Veo operation {operation_name}.")
+            time.sleep(max(1, poll_interval_secs))
+            status_url = self._operation_url(operation_name)
+            status, body = self.transport(status_url, {"x-goog-api-key": self.api_key}, None, "GET")
+            if status >= 400:
+                raise RuntimeError(f"Veo status request failed with HTTP {status}.")
+            last_status = _json_response(body, "Veo status operation")
+            if isinstance(last_status.get("error"), dict):
+                error = last_status["error"]
+                raise RuntimeError(f"Veo operation failed: {error.get('message') or error}")
+
+        video_uri = self._video_uri(last_status)
+        status, video_bytes = self.transport(video_uri, {"x-goog-api-key": self.api_key}, None, "GET")
+        if status >= 400:
+            raise RuntimeError(f"Veo video download failed with HTTP {status}.")
+        if not video_bytes:
+            raise RuntimeError("Veo video download returned an empty file.")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(video_bytes)
+        return {
+            "operation_name": operation_name,
+            "model": self.model,
+            "duration_seconds": duration_seconds,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "video_uri": video_uri,
+        }
+
+    def _operation_url(self, operation_name: str) -> str:
+        if operation_name.startswith("http://") or operation_name.startswith("https://"):
+            return operation_name
+        return f"{self.base_url}/{operation_name.lstrip('/')}"
+
+    def _video_uri(self, operation: Dict[str, Any]) -> str:
+        try:
+            uri = operation["response"]["generateVideoResponse"]["generatedSamples"][0]["video"]["uri"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError("Veo operation completed without a generated video URI.") from exc
+        uri = str(uri or "").strip()
+        if not uri:
+            raise RuntimeError("Veo operation returned an empty generated video URI.")
+        return uri
+
+
+def create_video_client(args: Dict[str, Any], env: Optional[Dict[str, str]] = None, transport: Transport = _http_transport) -> GeminiVeoClient:
+    values = os.environ if env is None else env
+    model = str(
+        args.get("video_model")
+        or values.get("MOFA_NOTEBOOK_VIDEO_MODEL")
+        or values.get("MOFA_VEO_MODEL")
+        or DEFAULT_VEO_MODEL
+    )
+    return GeminiVeoClient(
+        api_key=str(values.get("GEMINI_API_KEY") or ""),
+        model=model,
+        base_url=str(values.get("GEMINI_BASE_URL") or DEFAULT_VEO_BASE_URL),
+        transport=transport,
+    )
 
 
 VIDEO_OVERVIEW_SCHEMA = {
@@ -243,6 +402,109 @@ def _validate_overview(candidate: Dict[str, Any], chunks: List[Dict[str, Any]], 
     }
 
 
+def _bool_arg(args: Dict[str, Any], name: str, default: bool) -> bool:
+    value = args.get(name)
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"{name} must be a boolean.")
+
+
+def _video_duration_seconds(args: Dict[str, Any]) -> int:
+    raw = args.get("video_duration_seconds", 8)
+    try:
+        duration = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError("video_duration_seconds must be one of 4, 6, or 8.")
+    if duration not in {4, 6, 8}:
+        raise ValueError("video_duration_seconds must be one of 4, 6, or 8.")
+    return duration
+
+
+def _video_generation_params(args: Dict[str, Any]) -> Dict[str, Any]:
+    aspect_ratio = str(args.get("video_aspect_ratio") or "16:9").strip()
+    if aspect_ratio not in {"16:9", "9:16"}:
+        raise ValueError("video_aspect_ratio must be '16:9' or '9:16'.")
+    resolution = str(args.get("video_resolution") or "720p").strip().lower()
+    if resolution not in {"720p", "1080p", "4k"}:
+        raise ValueError("video_resolution must be '720p', '1080p', or '4k'.")
+    duration_seconds = _video_duration_seconds(args)
+    if resolution in {"1080p", "4k"} and duration_seconds != 8:
+        raise ValueError("video_duration_seconds must be 8 for 1080p or 4k Veo videos.")
+    try:
+        poll_interval = max(1, int(args.get("video_poll_interval_secs") or 10))
+        timeout = max(1, int(args.get("video_timeout_secs") or 420))
+    except (TypeError, ValueError):
+        raise ValueError("video_poll_interval_secs and video_timeout_secs must be integers.")
+    person_generation = args.get("person_generation")
+    if person_generation is not None:
+        person_generation = str(person_generation).strip()
+        if person_generation not in {"allow_all", "allow_adult", "dont_allow"}:
+            raise ValueError("person_generation must be allow_all, allow_adult, or dont_allow.")
+    return {
+        "duration_seconds": duration_seconds,
+        "aspect_ratio": aspect_ratio,
+        "resolution": resolution,
+        "poll_interval_secs": poll_interval,
+        "timeout_secs": timeout,
+        "person_generation": person_generation or None,
+    }
+
+
+def _build_veo_prompt(overview: Dict[str, Any], video_params: Dict[str, Any]) -> str:
+    section_narration = " ".join(section["narration"] for section in overview["script_sections"])
+    scene_lines = []
+    for scene in overview["scenes"][:4]:
+        scene_lines.append(
+            f"Scene {scene['scene']}: {scene['visual']} Narration cue: {scene['narration']}"
+        )
+    asset_lines = [
+        f"{asset['name']}: {asset['description']}"
+        for asset in overview["asset_brief"]["assets"][:3]
+    ]
+    return "\n".join(
+        [
+            f"Create a {video_params['duration_seconds']}-second source-grounded video overview titled '{overview['title']}'.",
+            f"Aspect ratio: {video_params['aspect_ratio']}. Resolution target: {video_params['resolution']}.",
+            f"Style: {overview['style']}. Tone: {overview['asset_brief']['tone']}. Make it polished, factual, and documentary-like.",
+            "Use native synchronized audio: concise narration, subtle ambient sound, and no on-screen citation IDs.",
+            "Only visualize facts contained in the supplied script and scenes. Do not add new claims, numbers, logos, people, or unsupported details.",
+            "Narration summary:",
+            section_narration,
+            "Scene plan:",
+            "\n".join(scene_lines),
+            "Visual asset guidance:",
+            "\n".join(asset_lines),
+        ]
+    ).strip()
+
+
+def _render_video_artifact(workspace: Path, overview: Dict[str, Any], args: Dict[str, Any], video_client=None) -> Dict[str, Any]:
+    params = _video_generation_params(args)
+    output_dir = _output_dir(workspace, overview["title"])
+    video_prompt = _build_veo_prompt(overview, params)
+    prompt_path = output_dir / "veo-prompt.txt"
+    video_path = output_dir / "overview.mp4"
+    metadata_path = output_dir / "veo-operation.json"
+    prompt_path.write_text(video_prompt + "\n", encoding="utf-8")
+    client = video_client if video_client is not None else create_video_client(args)
+    metadata = client.generate_video(video_prompt, video_path, **params)
+    metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "video_path": video_path.relative_to(workspace).as_posix(),
+        "veo_prompt_path": prompt_path.relative_to(workspace).as_posix(),
+        "veo_metadata_path": metadata_path.relative_to(workspace).as_posix(),
+        "veo": metadata,
+    }
+
+
 def _output_dir(workspace: Path, title: str) -> Path:
     path = workspace / "notebook-outputs" / "video-overviews" / slugify(title, "video-overview")
     path.mkdir(parents=True, exist_ok=True)
@@ -281,7 +543,7 @@ def _write_artifacts(workspace: Path, overview: Dict[str, Any]) -> Dict[str, str
     }
 
 
-def video_overview_generate(args: Dict[str, Any], llm_client=None) -> Dict[str, Any]:
+def video_overview_generate(args: Dict[str, Any], llm_client=None, video_client=None) -> Dict[str, Any]:
     workspace = _workspace(args)
     try:
         chunks = _chunks(workspace, _selected_ids(args))
@@ -295,10 +557,18 @@ def video_overview_generate(args: Dict[str, Any], llm_client=None) -> Dict[str, 
         candidate = client.generate(_build_prompt(args, chunks), VIDEO_OVERVIEW_SCHEMA)
         overview = _validate_overview(candidate, chunks, duration)
         artifacts = _write_artifacts(workspace, overview)
-        files_to_send = [str((workspace / path).resolve()) for path in artifacts.values()]
+        render_video = _bool_arg(args, "render_video", True)
+        if render_video:
+            artifacts.update(_render_video_artifact(workspace, overview, args, video_client=video_client))
+        files_to_send = [str((workspace / path).resolve()) for path in artifacts.values() if str(path).endswith((".md", ".json", ".txt", ".mp4"))]
+        output_dir = Path(artifacts["script_path"]).parent.as_posix()
+        if render_video:
+            message = f"Video overview rendered to {artifacts['video_path']} with grounded plan files in {output_dir}."
+        else:
+            message = f"Video overview plan written to {output_dir}."
         return success(
-            f"Video overview plan written to {Path(artifacts['script_path']).parent.as_posix()}.",
-            {**overview, **artifacts},
+            message,
+            {**overview, **artifacts, "render_video": render_video},
             files_to_send,
         )
     except Exception as exc:

@@ -6,7 +6,7 @@
   "tools": [
     {
       "name": "video_overview_generate",
-      "description": "Generate a grounded video overview plan from notebook sources.",
+      "description": "Generate a grounded video overview from notebook sources, then render a Veo 3.1 MP4 by default.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -47,6 +47,60 @@
           "model": {
             "type": "string",
             "description": "Optional model override."
+          },
+          "render_video": {
+            "type": "boolean",
+            "default": true,
+            "description": "Render a final MP4 with Veo after generating the grounded plan. Set false to create plan files only."
+          },
+          "video_model": {
+            "type": "string",
+            "description": "Optional Veo model override. Defaults to veo-3.1-generate-preview."
+          },
+          "video_duration_seconds": {
+            "type": "integer",
+            "enum": [
+              4,
+              6,
+              8
+            ],
+            "default": 8
+          },
+          "video_aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ],
+            "default": "16:9"
+          },
+          "video_resolution": {
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p",
+              "4k"
+            ],
+            "default": "720p"
+          },
+          "video_poll_interval_secs": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 10
+          },
+          "video_timeout_secs": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 420
+          },
+          "person_generation": {
+            "type": "string",
+            "enum": [
+              "allow_all",
+              "allow_adult",
+              "dont_allow"
+            ],
+            "description": "Optional Veo personGeneration policy."
           }
         },
         "x-octos-host-config-keys": [
@@ -68,7 +122,9 @@
         "MOFA_NOTEBOOK_PROVIDER",
         "MOFA_NOTEBOOK_MODEL",
         "MOFA_DATA_TABLE_PROVIDER",
-        "MOFA_DATA_TABLE_MODEL"
+        "MOFA_DATA_TABLE_MODEL",
+        "MOFA_NOTEBOOK_VIDEO_MODEL",
+        "MOFA_VEO_MODEL"
       ],
       "concurrency_class": "exclusive"
     }
