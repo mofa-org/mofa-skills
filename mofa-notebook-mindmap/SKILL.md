@@ -5,10 +5,22 @@ description: Generate source-grounded mind map Markdown and JSON from notebook s
 
 # Notebook Mind Map
 
-Call `mindmap_generate` after importing notebook sources. The tool writes both
-Markdown and JSON under `notebook-outputs/mindmaps/` and includes citations for
-each node.
+Call `mindmap_generate` after importing notebook sources. The tool calls a
+configured LLM with labelled notebook chunks, validates returned node citation
+chunk IDs, and writes both Markdown and JSON under
+`notebook-outputs/mindmaps/`.
+
+Optional inputs include `focus`, `source_ids`, `max_nodes`, `language`,
+`provider`, and `model`.
 
 ## Install-time Shared Dependencies
 
 - `~/.octos/skills/notebook_common/`
+
+## Model Configuration
+
+Uses the shared notebook LLM configuration: `GEMINI_API_KEY`, `OPENAI_API_KEY`,
+or Vertex via `GOOGLE_APPLICATION_CREDENTIALS` / `VERTEX_SA_JSON`. Optional
+defaults are `MOFA_NOTEBOOK_PROVIDER` and `MOFA_NOTEBOOK_MODEL`;
+`MOFA_DATA_TABLE_PROVIDER` and `MOFA_DATA_TABLE_MODEL` remain accepted for
+compatibility.

@@ -10,14 +10,64 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "workspace": { "type": "string" },
-          "workspace_root": { "type": "string" },
-          "focus": { "type": "string" },
-          "source_ids": { "type": "array", "items": { "type": "string" } },
-          "max_nodes": { "type": "integer" }
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          },
+          "focus": {
+            "type": "string"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_nodes": {
+            "type": "integer"
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional output language."
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "openai",
+              "vertex"
+            ],
+            "description": "Optional model provider override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override."
+          }
         },
-        "x-octos-host-config-keys": ["workspace_root"]
-      }
+        "x-octos-host-config-keys": [
+          "workspace_root"
+        ]
+      },
+      "env": [
+        "GEMINI_API_KEY",
+        "GEMINI_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "VERTEX_SA_JSON",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL",
+        "MOFA_DATA_TABLE_PROVIDER",
+        "MOFA_DATA_TABLE_MODEL"
+      ],
+      "concurrency_class": "exclusive"
     }
   ]
 }
