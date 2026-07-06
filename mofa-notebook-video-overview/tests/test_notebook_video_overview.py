@@ -41,6 +41,13 @@ class FakeVideoClient:
         }
 
 
+
+
+class FailingVideoClient:
+    def generate_video(self, prompt, output_path, **params):
+        raise RuntimeError("quota exhausted")
+
+
 class NotebookVideoOverviewTests(unittest.TestCase):
     def make_workspace(self):
         tmp = tempfile.TemporaryDirectory()
@@ -173,6 +180,29 @@ class NotebookVideoOverviewTests(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertIn("cites unknown chunk", result["output"])
+
+    def test_video_render_failure_returns_plan_artifacts(self):
+        tmp, workspace = self.make_workspace()
+        self.addCleanup(tmp.cleanup)
+        llm = FakeLlmClient(self.overview_response())
+
+        result = video_overview_generate(
+            {"workspace": str(workspace), "title": "Market Brief"},
+            llm_client=llm,
+            video_client=FailingVideoClient(),
+        )
+
+        self.assertTrue(result["success"], result)
+        self.assertFalse(result["data"]["video_rendered"])
+        self.assertEqual(result["data"]["video_error"], "quota exhausted")
+        self.assertNotIn("video_path", result["data"])
+        script = workspace / result["data"]["script_path"]
+        prompt = workspace / result["data"]["veo_prompt_path"]
+        self.assertTrue(script.is_file())
+        self.assertTrue(prompt.is_file())
+        self.assertIn(str(script.resolve()), result["files_to_send"])
+        self.assertIn(str(prompt.resolve()), result["files_to_send"])
+        self.assertIn("Video rendering failed", result["output"])
 
     def test_render_video_false_writes_plan_without_calling_video_client(self):
         tmp, workspace = self.make_workspace()
@@ -308,6 +338,17 @@ class NotebookVideoOverviewTests(unittest.TestCase):
         self.assertEqual(client.model, "veo-3.1-generate-001")
         self.assertEqual(client.project, "proj")
         self.assertEqual(client.location, "us-central1")
+
+    def test_missing_selected_source_returns_clear_error_before_model_call(self):
+        tmp, workspace = self.make_workspace()
+        self.addCleanup(tmp.cleanup)
+        llm = FakeLlmClient(self.overview_response())
+
+        result = video_overview_generate({"workspace": str(workspace), "source_ids": ["missing"]}, llm_client=llm)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Notebook source not found: missing", result["output"])
+        self.assertEqual(llm.calls, [])
 
     def test_empty_manifest_returns_clear_error_before_model_call(self):
         with tempfile.TemporaryDirectory() as tmp:

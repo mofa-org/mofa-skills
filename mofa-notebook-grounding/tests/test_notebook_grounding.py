@@ -54,6 +54,18 @@ class NotebookGroundingTests(unittest.TestCase):
         self.assertEqual(result["data"]["hits"][0]["source_id"], "notes")
         self.assertNotIn("report", {hit["source_id"] for hit in result["data"]["hits"]})
 
+    def test_source_search_rejects_unknown_selected_source(self):
+        tmp, workspace = self.make_workspace()
+        self.addCleanup(tmp.cleanup)
+
+        result = handle_tool(
+            "source_search",
+            {"workspace": str(workspace), "query": "risk", "source_ids": ["report", "missing"]},
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("Notebook source not found: missing", result["output"])
+
     def test_source_lookup_returns_exact_chunk_text(self):
         tmp, workspace = self.make_workspace()
         self.addCleanup(tmp.cleanup)

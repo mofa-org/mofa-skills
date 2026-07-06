@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from notebook_common.llm_client import create_llm_client
 from notebook_common.output import read_jsonl
 from notebook_common.paths import resolve_workspace_path, workspace_from_args
-from notebook_common.sources import load_manifest, slugify
+from notebook_common.sources import load_manifest, select_sources, slugify
 
 
 MINDMAP_SCHEMA = {
@@ -70,11 +70,8 @@ def _selected_ids(args: Dict[str, Any]):
 
 
 def _chunks(workspace: Path, source_ids=None) -> List[Dict[str, Any]]:
-    selected = set(source_ids or [])
     chunks = []
-    for source in load_manifest(workspace).get("sources", []):
-        if selected and source.get("id") not in selected:
-            continue
+    for source in select_sources(load_manifest(workspace), source_ids):
         path = resolve_workspace_path(workspace, str(source["chunks_path"]))
         if path.exists():
             chunks.extend(read_jsonl(path))

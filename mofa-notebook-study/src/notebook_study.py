@@ -4,7 +4,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from notebook_common.llm_client import create_llm_client
 from notebook_common.output import read_jsonl
 from notebook_common.paths import resolve_workspace_path, workspace_from_args
-from notebook_common.sources import load_manifest, slugify
+from notebook_common.sources import load_manifest, select_sources, slugify
 
 
 STUDY_GUIDE_SCHEMA = {
@@ -134,12 +134,7 @@ def _selected_ids(args: Dict[str, Any]):
 
 
 def _sources(workspace: Path, source_ids: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
-    manifest = load_manifest(workspace)
-    sources = list(manifest.get("sources", []))
-    selected = set(source_ids or [])
-    if selected:
-        sources = [source for source in sources if source.get("id") in selected]
-    return sources
+    return select_sources(load_manifest(workspace), source_ids)
 
 
 def _chunks(workspace: Path, source_ids: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:

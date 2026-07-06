@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from notebook_common.output import read_jsonl
 from notebook_common.paths import resolve_workspace_path, workspace_from_args
 from notebook_common.search import search_chunks
-from notebook_common.sources import load_manifest
+from notebook_common.sources import load_manifest, select_sources
 
 
 def success(output: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -26,11 +26,8 @@ def _manifest_sources(workspace: Path) -> List[Dict[str, Any]]:
 
 
 def _load_chunks(workspace: Path, source_ids: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
-    selected = set(source_ids or [])
     chunks: List[Dict[str, Any]] = []
-    for source in _manifest_sources(workspace):
-        if selected and source.get("id") not in selected:
-            continue
+    for source in select_sources(load_manifest(workspace), source_ids):
         chunks_path = resolve_workspace_path(workspace, str(source.get("chunks_path", "")))
         if not chunks_path.exists():
             continue

@@ -103,6 +103,17 @@ class NotebookMindmapTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("cites unknown chunk", result["output"])
 
+    def test_missing_selected_source_returns_clear_error_before_model_call(self):
+        tmp, workspace = self.make_workspace()
+        self.addCleanup(tmp.cleanup)
+        llm = FakeLlmClient({})
+
+        result = mindmap_generate({"workspace": str(workspace), "source_ids": ["report", "missing"]}, llm_client=llm)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Notebook source not found: missing", result["output"])
+        self.assertEqual(llm.calls, [])
+
     def test_empty_manifest_returns_clear_error_before_model_call(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = handle_tool("mindmap_generate", {"workspace": tmp})

@@ -48,6 +48,18 @@ def save_manifest(workspace: Path, manifest: Dict[str, Any]) -> None:
         fh.write("\n")
 
 
+def select_sources(manifest: Dict[str, Any], source_ids=None) -> list[Dict[str, Any]]:
+    sources = list(manifest.get("sources", []))
+    selected_ids = [str(source_id) for source_id in (source_ids or [])]
+    if not selected_ids:
+        return sources
+    source_by_id = {str(source.get("id")): source for source in sources}
+    missing = [source_id for source_id in selected_ids if source_id not in source_by_id]
+    if missing:
+        raise ValueError(f"Notebook source not found: {', '.join(missing)}")
+    return [source_by_id[source_id] for source_id in selected_ids]
+
+
 def upsert_source(manifest: Dict[str, Any], entry: SourceEntry) -> Dict[str, Any]:
     next_manifest = {"version": manifest.get("version", 1), "sources": []}
     replaced = False

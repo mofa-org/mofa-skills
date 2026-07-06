@@ -16,7 +16,7 @@ from notebook_common.llm_client import (
 )
 from notebook_common.output import read_jsonl
 from notebook_common.paths import resolve_workspace_path, workspace_from_args
-from notebook_common.sources import load_manifest, slugify
+from notebook_common.sources import load_manifest, select_sources, slugify
 
 
 Transport = Callable[[str, Dict[str, str], Optional[Dict[str, Any]], str], Tuple[int, bytes]]
@@ -503,11 +503,7 @@ def _selected_ids(args: Dict[str, Any]) -> Optional[Iterable[str]]:
 
 
 def _sources(workspace: Path, source_ids: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
-    sources = list(load_manifest(workspace).get("sources", []))
-    selected = set(source_ids or [])
-    if selected:
-        sources = [source for source in sources if source.get("id") in selected]
-    return sources
+    return select_sources(load_manifest(workspace), source_ids)
 
 
 def _chunks(workspace: Path, source_ids: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
@@ -760,8 +756,14 @@ def _render_video_artifact(workspace: Path, overview: Dict[str, Any], args: Dict
     video_path = output_dir / "overview.mp4"
     metadata_path = output_dir / "veo-operation.json"
     prompt_path.write_text(video_prompt + "\n", encoding="utf-8")
-    client = video_client if video_client is not None else create_video_client(args)
-    metadata = client.generate_video(video_prompt, video_path, **params)
+    try:
+        client = video_client if video_client is not None else create_video_client(args)
+        metadata = client.generate_video(video_prompt, video_path, **params)
+    except Exception as exc:
+        return {
+            "veo_prompt_path": prompt_path.relative_to(workspace).as_posix(),
+            "video_error": str(exc),
+        }
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {
         "video_path": video_path.relative_to(workspace).as_posix(),
@@ -828,13 +830,16 @@ def video_overview_generate(args: Dict[str, Any], llm_client=None, video_client=
             artifacts.update(_render_video_artifact(workspace, overview, args, video_client=video_client))
         files_to_send = [str((workspace / path).resolve()) for path in artifacts.values() if str(path).endswith((".md", ".json", ".txt", ".mp4"))]
         output_dir = Path(artifacts["script_path"]).parent.as_posix()
-        if render_video:
+        video_rendered = "video_path" in artifacts
+        if video_rendered:
             message = f"Video overview rendered to {artifacts['video_path']} with grounded plan files in {output_dir}."
+        elif artifacts.get("video_error"):
+            message = f"Video overview plan written to {output_dir}. Video rendering failed: {artifacts['video_error']}"
         else:
             message = f"Video overview plan written to {output_dir}."
         return success(
             message,
-            {**overview, **artifacts, "render_video": render_video},
+            {**overview, **artifacts, "render_video": render_video, "video_rendered": video_rendered},
             files_to_send,
         )
     except Exception as exc:

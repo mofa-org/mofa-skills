@@ -183,6 +183,17 @@ class NotebookStudyTests(unittest.TestCase):
         self.assertIn("notes#chunk-0001", llm.calls[0]["prompt"])
         self.assertNotIn("report#chunk-0001", llm.calls[0]["prompt"])
 
+    def test_missing_selected_source_returns_clear_error_before_model_call(self):
+        tmp, workspace = self.make_workspace()
+        self.addCleanup(tmp.cleanup)
+        llm = FakeLlmClient({})
+
+        result = study_guide_generate({"workspace": str(workspace), "source_ids": ["report", "missing"]}, llm_client=llm)
+
+        self.assertFalse(result["success"])
+        self.assertIn("Notebook source not found: missing", result["output"])
+        self.assertEqual(llm.calls, [])
+
     def test_empty_manifest_returns_clear_error_before_model_call(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = handle_tool("study_guide_generate", {"workspace": tmp})
