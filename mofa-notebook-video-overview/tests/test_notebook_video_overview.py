@@ -10,7 +10,17 @@ sys.path.insert(0, str(ROOT / "mofa-notebook-source" / "src"))
 sys.path.insert(0, str(ROOT / "mofa-notebook-video-overview" / "src"))
 
 from notebook_source import handle_tool as source_tool
-from notebook_video_overview import handle_tool
+from notebook_video_overview import handle_tool, video_overview_generate
+
+
+class FakeLlmClient:
+    def __init__(self, response):
+        self.response = response
+        self.calls = []
+
+    def generate(self, prompt, schema):
+        self.calls.append({"prompt": prompt, "schema": schema})
+        return self.response
 
 
 class NotebookVideoOverviewTests(unittest.TestCase):
@@ -28,16 +38,61 @@ class NotebookVideoOverviewTests(unittest.TestCase):
         )
         return tmp, workspace
 
-    def test_video_overview_generate_writes_script_scene_plan_and_asset_brief(self):
+    def overview_response(self):
+        return {
+            "title": "Market Brief",
+            "style": "executive",
+            "duration_minutes": 3,
+            "script_sections": [
+                {
+                    "heading": "Growth signal",
+                    "narration": "Revenue grew in enterprise accounts.",
+                    "citation_chunk_ids": ["market-report#chunk-0001"],
+                }
+            ],
+            "scenes": [
+                {
+                    "scene": 1,
+                    "type": "evidence",
+                    "visual": "Revenue growth card",
+                    "narration": "Show enterprise revenue growth.",
+                    "citation_chunk_ids": ["market-report#chunk-0001"],
+                },
+                {
+                    "scene": 2,
+                    "type": "risk",
+                    "visual": "Hardware risk card",
+                    "narration": "Show supply chain risk for hardware.",
+                    "citation_chunk_ids": ["market-report#chunk-0002"],
+                },
+            ],
+            "asset_brief": {
+                "tone": "executive",
+                "assets": [
+                    {
+                        "name": "Revenue card",
+                        "description": "Card showing enterprise growth.",
+                        "citation_chunk_ids": ["market-report#chunk-0001"],
+                    }
+                ],
+            },
+            "handoff_notes": ["Keep citations visible on evidence cards."],
+        }
+
+    def test_video_overview_generate_uses_llm_and_writes_script_scene_plan_and_asset_brief(self):
         tmp, workspace = self.make_workspace()
         self.addCleanup(tmp.cleanup)
+        llm = FakeLlmClient(self.overview_response())
 
-        result = handle_tool(
-            "video_overview_generate",
+        result = video_overview_generate(
             {"workspace": str(workspace), "title": "Market Brief", "duration_minutes": 3, "style": "executive"},
+            llm_client=llm,
         )
 
         self.assertTrue(result["success"], result)
+        self.assertEqual(len(llm.calls), 1)
+        self.assertIn("Generate a source-grounded video overview", llm.calls[0]["prompt"])
+        self.assertIn("market-report#chunk-0001", llm.calls[0]["prompt"])
         script = workspace / result["data"]["script_path"]
         scenes = workspace / result["data"]["scene_plan_path"]
         brief = workspace / result["data"]["asset_brief_path"]
@@ -46,14 +101,16 @@ class NotebookVideoOverviewTests(unittest.TestCase):
         self.assertTrue(scenes.is_file())
         self.assertTrue(brief.is_file())
         self.assertTrue(handoff.is_file())
+        self.assertIn("Revenue grew in enterprise accounts", script.read_text(encoding="utf-8"))
         self.assertIn("Market Report (notebook-sources/market-report/source.md:", script.read_text(encoding="utf-8"))
         scene_data = json.loads(scenes.read_text(encoding="utf-8"))
         self.assertEqual(scene_data["title"], "Market Brief")
-        self.assertGreaterEqual(len(scene_data["scenes"]), 2)
+        self.assertEqual(scene_data["scenes"][1]["type"], "risk")
         self.assertIn("mofa-slides", handoff.read_text(encoding="utf-8"))
         self.assertIn("mofa-fm", handoff.read_text(encoding="utf-8"))
+        self.assertIn(str(script.resolve()), result["files_to_send"])
 
-    def test_video_overview_generate_honors_selected_sources(self):
+    def test_video_overview_generate_honors_selected_sources_in_llm_prompt(self):
         tmp, workspace = self.make_workspace()
         self.addCleanup(tmp.cleanup)
         (workspace / "uploads" / "notes.md").write_text("# Notes\n\nOnboarding improved.", encoding="utf-8")
@@ -61,14 +118,36 @@ class NotebookVideoOverviewTests(unittest.TestCase):
             "source_import",
             {"workspace": str(workspace), "path": "uploads/notes.md", "title": "Notes"},
         )
+        llm = FakeLlmClient(
+            {
+                **self.overview_response(),
+                "script_sections": [
+                    {"heading": "Notes", "narration": "Onboarding improved.", "citation_chunk_ids": ["notes#chunk-0001"]}
+                ],
+                "scenes": [
+                    {"scene": 1, "type": "evidence", "visual": "Notes card", "narration": "Show onboarding.", "citation_chunk_ids": ["notes#chunk-0001"]}
+                ],
+                "asset_brief": {"tone": "clear", "assets": [{"name": "Notes card", "description": "Show onboarding.", "citation_chunk_ids": ["notes#chunk-0001"]}]},
+            }
+        )
 
-        result = handle_tool("video_overview_generate", {"workspace": str(workspace), "source_ids": ["notes"]})
+        result = video_overview_generate({"workspace": str(workspace), "source_ids": ["notes"]}, llm_client=llm)
 
-        script = (workspace / result["data"]["script_path"]).read_text(encoding="utf-8")
-        self.assertIn("Notes (notebook-sources/notes/source.md:", script)
-        self.assertNotIn("Market Report (notebook-sources/market-report/source.md:", script)
+        self.assertTrue(result["success"], result)
+        self.assertIn("notes#chunk-0001", llm.calls[0]["prompt"])
+        self.assertNotIn("market-report#chunk-0001", llm.calls[0]["prompt"])
 
-    def test_empty_manifest_returns_clear_error(self):
+    def test_rejects_model_citations_that_are_not_in_notebook_sources(self):
+        tmp, workspace = self.make_workspace()
+        self.addCleanup(tmp.cleanup)
+        bad = self.overview_response()
+        bad["script_sections"][0]["citation_chunk_ids"] = ["missing#chunk-9999"]
+        result = video_overview_generate({"workspace": str(workspace)}, llm_client=FakeLlmClient(bad))
+
+        self.assertFalse(result["success"])
+        self.assertIn("cites unknown chunk", result["output"])
+
+    def test_empty_manifest_returns_clear_error_before_model_call(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = handle_tool("video_overview_generate", {"workspace": tmp})
 
