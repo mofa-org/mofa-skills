@@ -15,9 +15,10 @@ This skill does not render final video. Use the returned handoff file with
 Optional inputs include `title`, `style`, `duration_minutes`, `source_ids`,
 `language`, `provider`, and `model`.
 
-## Install-time Shared Dependencies
+## Runtime
 
-- `~/.octos/skills/notebook_common/`
+The shared notebook runtime is bundled inside the skill, so standalone
+installations do not need an extra `notebook_common` directory.
 
 ## Model Configuration
 

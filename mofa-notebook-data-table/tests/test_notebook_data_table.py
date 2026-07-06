@@ -102,6 +102,8 @@ class NotebookDataTableTests(unittest.TestCase):
                 "GOOGLE_OAUTH_ACCESS_TOKEN",
                 "MOFA_DATA_TABLE_PROVIDER",
                 "MOFA_DATA_TABLE_MODEL",
+                "MOFA_NOTEBOOK_PROVIDER",
+                "MOFA_NOTEBOOK_MODEL",
             },
         )
 

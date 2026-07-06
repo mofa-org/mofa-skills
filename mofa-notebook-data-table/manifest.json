@@ -73,7 +73,9 @@
         "VERTEX_ACCESS_TOKEN",
         "GOOGLE_OAUTH_ACCESS_TOKEN",
         "MOFA_DATA_TABLE_PROVIDER",
-        "MOFA_DATA_TABLE_MODEL"
+        "MOFA_DATA_TABLE_MODEL",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL"
       ],
       "concurrency_class": "exclusive"
     }

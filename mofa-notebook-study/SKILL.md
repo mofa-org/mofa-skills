@@ -13,9 +13,10 @@ If the user asks for polished prose, first generate the study artifact, then use
 the returned file path as grounding for the final response. Optional inputs
 include `focus`, `source_ids`, `language`, `provider`, and `model`.
 
-## Install-time Shared Dependencies
+## Runtime
 
-- `~/.octos/skills/notebook_common/`
+The shared notebook runtime is bundled inside the skill, so standalone
+installations do not need an extra `notebook_common` directory.
 
 ## Model Configuration
 

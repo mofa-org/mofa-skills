@@ -43,8 +43,10 @@ profile/keychain service account JSON from `VERTEX_SA_JSON`; set
 `GOOGLE_CLOUD_PROJECT` only when the JSON lacks `project_id`. Optional endpoint
 overrides are `GEMINI_BASE_URL`, `OPENAI_BASE_URL`, and `VERTEX_BASE_URL`.
 `GOOGLE_CLOUD_LOCATION` defaults to `us-central1`; set it to `global` for the
-global Vertex endpoint. `MOFA_DATA_TABLE_PROVIDER` and
-`MOFA_DATA_TABLE_MODEL` provide standalone defaults.
+global Vertex endpoint. `MOFA_NOTEBOOK_PROVIDER` and
+`MOFA_NOTEBOOK_MODEL` provide shared notebook defaults;
+`MOFA_DATA_TABLE_PROVIDER` and `MOFA_DATA_TABLE_MODEL` remain accepted for
+compatibility.
 
 ## Standalone Invocation
 
