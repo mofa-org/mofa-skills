@@ -57,6 +57,45 @@ class NotebookSourceTests(unittest.TestCase):
             manifest = json.loads((workspace / "notebook-sources/manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["sources"][0]["source_path"], "notebook-sources/market-report/source.md")
 
+    def test_source_import_writes_dual_layer_text_source_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "uploads").mkdir()
+            (workspace / "uploads" / "report.md").write_text(
+                "# Market Report\n\nRevenue grew.\n\n## Risks\n\nSupply chain risk increased.\n",
+                encoding="utf-8",
+            )
+
+            result = handle_tool(
+                "source_import",
+                {
+                    "workspace": str(workspace),
+                    "path": "uploads/report.md",
+                    "title": "Market Report",
+                },
+            )
+
+            self.assertTrue(result["success"], result)
+            source_dir = workspace / "notebook-sources" / "market-report"
+            self.assertTrue((source_dir / "source.md").is_file())
+            self.assertTrue((source_dir / "raw.md").is_file())
+            self.assertTrue((source_dir / "summary.md").is_file())
+            self.assertTrue((source_dir / "chunks.jsonl").is_file())
+            metadata = json.loads((source_dir / "metadata.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["raw_path"], "notebook-sources/market-report/raw.md")
+            self.assertEqual(metadata["summary_path"], "notebook-sources/market-report/summary.md")
+            self.assertEqual(
+                metadata["layers"],
+                {
+                    "raw": "notebook-sources/market-report/raw.md",
+                    "summary": "notebook-sources/market-report/summary.md",
+                    "source": "notebook-sources/market-report/source.md",
+                },
+            )
+            source_body = (source_dir / "source.md").read_text(encoding="utf-8")
+            self.assertIn("## Raw Extracted Content", source_body)
+            self.assertIn("## AI Summary / Description", source_body)
+
     def test_source_import_rejects_traversal(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)

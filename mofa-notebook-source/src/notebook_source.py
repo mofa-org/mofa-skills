@@ -1,8 +1,8 @@
 import html
 import json
 import re
-from pathlib import Path
-from typing import Any, Dict, List
+from pathlib import Path, PurePosixPath
+from typing import Any, Dict, List, Optional
 
 from notebook_common.chunking import chunk_markdown
 from notebook_common.output import write_jsonl
@@ -44,7 +44,49 @@ def _strip_html(raw: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
-def _normalize_content(path: Path, title: str) -> Dict[str, str]:
+def _ensure_trailing_newline(value: str) -> str:
+    return value.rstrip() + "\n"
+
+
+def _local_summary_markdown(title: str, kind: str, raw_markdown: str) -> str:
+    non_empty_lines = [line for line in raw_markdown.splitlines() if line.strip()]
+    words = re.findall(r"\S+", raw_markdown)
+    return _ensure_trailing_newline(
+        "\n".join(
+            [
+                f"# {title}",
+                "",
+                "No remote AI summary was required for this text source.",
+                "",
+                f"- Source type: {kind}",
+                f"- Non-empty lines: {len(non_empty_lines)}",
+                f"- Approximate words: {len(words)}",
+            ]
+        )
+    )
+
+
+def _compose_source_markdown(title: str, raw_markdown: str, summary_markdown: str) -> str:
+    raw_body = raw_markdown.strip() or "_No raw text extracted._"
+    summary_body = summary_markdown.strip() or "_No summary generated._"
+    return _ensure_trailing_newline(
+        "\n".join(
+            [
+                f"# {title}",
+                "",
+                "## Raw Extracted Content",
+                "",
+                raw_body,
+                "",
+                "## AI Summary / Description",
+                "",
+                summary_body,
+            ]
+        )
+    )
+
+
+def _normalize_content(path: Path, title: str) -> Dict[str, Any]:
     ext = path.suffix.lower()
     if ext not in TEXT_EXTENSIONS:
         raise ValueError(
@@ -53,22 +95,36 @@ def _normalize_content(path: Path, title: str) -> Dict[str, str]:
         )
     raw = _read_text_file(path)
     if ext in {".md", ".markdown"}:
-        body = raw
+        raw_markdown = raw
         kind = "markdown"
     elif ext == ".csv":
-        body = f"# {title}\n\n```csv\n{raw.strip()}\n```\n"
+        raw_markdown = f"```csv\n{raw.strip()}\n```\n"
         kind = "csv"
     elif ext == ".json":
         parsed = json.loads(raw)
-        body = f"# {title}\n\n```json\n{json.dumps(parsed, ensure_ascii=False, indent=2)}\n```\n"
+        raw_markdown = f"```json\n{json.dumps(parsed, ensure_ascii=False, indent=2)}\n```\n"
         kind = "json"
     elif ext in {".html", ".htm"}:
-        body = f"# {title}\n\n{_strip_html(raw)}\n"
+        raw_markdown = _strip_html(raw)
         kind = "html"
     else:
-        body = f"# {title}\n\n{raw.strip()}\n"
+        raw_markdown = raw
         kind = "text"
-    return {"kind": kind, "body": body.strip() + "\n"}
+    raw_markdown = _ensure_trailing_newline(raw_markdown)
+    summary_markdown = _local_summary_markdown(title, kind, raw_markdown)
+    source_markdown = _compose_source_markdown(title, raw_markdown, summary_markdown)
+    return {
+        "kind": kind,
+        "raw_markdown": raw_markdown,
+        "summary_markdown": summary_markdown,
+        "source_markdown": source_markdown,
+        "warnings": [],
+        "provenance": {"normalizer": "local_text", "extension": ext or None},
+    }
+
+
+def _source_sibling_path(entry: SourceEntry, filename: str) -> str:
+    return str(PurePosixPath(entry.source_path).with_name(filename))
 
 
 def _write_source_files(
@@ -76,6 +132,8 @@ def _write_source_files(
     entry: SourceEntry,
     body: str,
     metadata: Dict[str, Any],
+    raw_markdown: Optional[str] = None,
+    summary_markdown: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     source_path = resolve_workspace_path(workspace, entry.source_path)
     metadata_path = resolve_workspace_path(workspace, entry.metadata_path)
@@ -85,6 +143,12 @@ def _write_source_files(
     chunks_path.parent.mkdir(parents=True, exist_ok=True)
     source_path.write_text(body, encoding="utf-8")
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if raw_markdown is not None:
+        raw_path = resolve_workspace_path(workspace, _source_sibling_path(entry, "raw.md"))
+        raw_path.write_text(raw_markdown, encoding="utf-8")
+    if summary_markdown is not None:
+        summary_path = resolve_workspace_path(workspace, _source_sibling_path(entry, "summary.md"))
+        summary_path.write_text(summary_markdown, encoding="utf-8")
     chunks = chunk_markdown(entry.id, entry.title, entry.source_path, body)
     write_jsonl(chunks_path, chunks)
     return chunks
@@ -104,14 +168,32 @@ def source_import(args: Dict[str, Any]) -> Dict[str, Any]:
         normalized = _normalize_content(input_path, title)
         kind = str(args.get("kind") or normalized["kind"])
         entry = source_entry_for(workspace, source_id, title, kind, str(path_arg))
+        raw_path = _source_sibling_path(entry, "raw.md")
+        summary_path = _source_sibling_path(entry, "summary.md")
         metadata = {
             "id": entry.id,
             "title": title,
             "kind": kind,
             "original_path": str(path_arg),
             "source_path": entry.source_path,
+            "raw_path": raw_path,
+            "summary_path": summary_path,
+            "layers": {
+                "raw": raw_path,
+                "summary": summary_path,
+                "source": entry.source_path,
+            },
+            "warnings": normalized.get("warnings", []),
+            "provenance": normalized.get("provenance", {}),
         }
-        chunks = _write_source_files(workspace, entry, normalized["body"], metadata)
+        chunks = _write_source_files(
+            workspace,
+            entry,
+            normalized["source_markdown"],
+            metadata,
+            normalized["raw_markdown"],
+            normalized["summary_markdown"],
+        )
         manifest = upsert_source(load_manifest(workspace), entry)
         save_manifest(workspace, manifest)
         return success(
@@ -149,11 +231,18 @@ def source_normalize(args: Dict[str, Any]) -> Dict[str, Any]:
         return failure(f"normalized source file missing: {entry.source_path}")
     body = source_path.read_text(encoding="utf-8", errors="replace")
     metadata = {
+        **(
+            json.loads(resolve_workspace_path(workspace, entry.metadata_path).read_text(encoding="utf-8"))
+            if resolve_workspace_path(workspace, entry.metadata_path).exists()
+            else {}
+        ),
         "id": entry.id,
         "title": entry.title,
         "kind": entry.kind,
         "original_path": entry.original_path,
         "source_path": entry.source_path,
+        "metadata_path": entry.metadata_path,
+        "chunks_path": entry.chunks_path,
         "renormalized": True,
     }
     chunks = _write_source_files(workspace, entry, body, metadata)
