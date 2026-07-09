@@ -12,6 +12,22 @@ from notebook_source import handle_tool
 
 
 class NotebookSourceTests(unittest.TestCase):
+    def test_manifest_declares_source_import_action_with_workspace_paths(self):
+        manifest = json.loads(
+            (ROOT / "mofa-notebook-source" / "manifest.json").read_text(encoding="utf-8")
+        )
+
+        action = next(
+            (item for item in manifest.get("actions", []) if item.get("id") == "source.import"),
+            None,
+        )
+
+        self.assertIsNotNone(action)
+        self.assertEqual(action["binding"]["tool"], "source_import")
+        self.assertEqual(action["binding"]["input_mode"], "file_each")
+        self.assertEqual(action["binding"]["file_argument"], "path")
+        self.assertEqual(action["binding"]["file_materialization"], "workspace_relative")
+
     def test_source_import_creates_normalized_source_manifest_and_chunks(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)

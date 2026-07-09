@@ -47,5 +47,34 @@
         "x-octos-host-config-keys": ["workspace_root"]
       }
     }
+  ],
+  "actions": [
+    {
+      "id": "source.import",
+      "label": "Add source",
+      "description": "Import uploaded files into source-grounded workspace sources.",
+      "tags": ["source", "document"],
+      "surfaces": ["studio.sources"],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "paths": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["paths"]
+      },
+      "ui_schema": {
+        "accept": [".md", ".markdown", ".txt", ".csv", ".json", ".html", ".htm"]
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "source_import",
+        "input_mode": "file_each",
+        "file_argument": "path",
+        "file_materialization": "workspace_relative"
+      }
+    }
   ]
 }
