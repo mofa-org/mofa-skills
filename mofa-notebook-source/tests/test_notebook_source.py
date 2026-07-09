@@ -33,6 +33,10 @@ class NotebookSourceTests(unittest.TestCase):
             (item for item in manifest.get("actions", []) if item.get("id") == "source.import"),
             None,
         )
+        action_ids = {item.get("id") for item in manifest.get("actions", [])}
+
+        self.assertIn("source.rename", action_ids)
+        self.assertIn("source.remove", action_ids)
 
         source_import_tool = next(
             (item for item in manifest.get("tools", []) if item.get("name") == "source_import"),
@@ -136,6 +140,77 @@ class NotebookSourceTests(unittest.TestCase):
 
             self.assertFalse(result["success"])
             self.assertIn("must not contain '..'", result["output"])
+
+    def test_source_rename_updates_manifest_metadata_and_chunks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "uploads").mkdir()
+            (workspace / "uploads" / "notes.md").write_text(
+                "# Notes\n\nold title body",
+                encoding="utf-8",
+            )
+            handle_tool(
+                "source_import",
+                {"workspace": str(workspace), "path": "uploads/notes.md", "title": "Notes"},
+            )
+
+            result = handle_tool(
+                "source_rename",
+                {
+                    "workspace": str(workspace),
+                    "source_id": "notes",
+                    "title": "Renamed Notes",
+                },
+            )
+
+            self.assertTrue(result["success"], result)
+            manifest = json.loads((workspace / "notebook-sources/manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["sources"][0]["title"], "Renamed Notes")
+            metadata = json.loads(
+                (workspace / "notebook-sources/notes/metadata.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(metadata["title"], "Renamed Notes")
+            source_body = (workspace / "notebook-sources/notes/source.md").read_text(encoding="utf-8")
+            self.assertTrue(source_body.startswith("# Renamed Notes\n"))
+            chunks = [
+                json.loads(line)
+                for line in (workspace / "notebook-sources/notes/chunks.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            self.assertTrue(chunks)
+            self.assertEqual(chunks[0]["title"], "Renamed Notes")
+
+    def test_source_remove_deletes_manifest_entry_and_source_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "uploads").mkdir()
+            (workspace / "uploads" / "notes.md").write_text("# Notes\n\nbody", encoding="utf-8")
+            handle_tool(
+                "source_import",
+                {"workspace": str(workspace), "path": "uploads/notes.md", "title": "Notes"},
+            )
+
+            result = handle_tool(
+                "source_remove",
+                {"workspace": str(workspace), "source_id": "notes"},
+            )
+
+            self.assertTrue(result["success"], result)
+            manifest = json.loads((workspace / "notebook-sources/manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["sources"], [])
+            self.assertFalse((workspace / "notebook-sources/notes").exists())
+            self.assertTrue(
+                (workspace / "uploads" / "notes.md").exists(),
+                "removing a notebook source should not delete the original uploaded file",
+            )
+
+    def test_source_remove_returns_clear_error_for_missing_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = handle_tool("source_remove", {"workspace": tmp, "source_id": "missing"})
+
+            self.assertFalse(result["success"])
+            self.assertIn("source not found: missing", result["output"])
 
     def test_source_manifest_returns_existing_sources(self):
         with tempfile.TemporaryDirectory() as tmp:

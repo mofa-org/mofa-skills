@@ -17,6 +17,8 @@ listed in `notebook-sources/manifest.json`.
 1. Call `source_import` for each workspace-relative source path the user selected.
 2. Call `source_manifest` to inspect available notebook sources.
 3. Use `mofa-notebook-grounding` tools for source search, lookup, and citations.
+4. Call `source_rename` when the user changes the display title of an imported source.
+5. Call `source_remove` when the user removes an imported source from notebook grounding.
 
 ## Source Paths
 
@@ -52,6 +54,12 @@ Each imported source writes a stable dual-layer source directory:
 - `notebook-sources/<source_id>/source.md`: combined source used for chunking and grounding.
 - `notebook-sources/<source_id>/chunks.jsonl`: chunk index for search.
 - `notebook-sources/<source_id>/metadata.json`: provenance, layer paths, warnings, and source metadata.
+
+`source_rename` updates the source title in `manifest.json`, `metadata.json`,
+`source.md`, and `chunks.jsonl` while leaving `original_path` unchanged.
+`source_remove` deletes the normalized `notebook-sources/<source_id>/`
+directory and removes the manifest entry, but it does not delete the original
+uploaded file.
 
 The workspace-level `notebook-sources/manifest.json` is updated after a
 successful import. If a format cannot be read faithfully, the skill should

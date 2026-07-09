@@ -1,6 +1,7 @@
 import html
 import json
 import re
+import shutil
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 
@@ -278,6 +279,17 @@ def source_import(args: Dict[str, Any]) -> Dict[str, Any]:
         return failure(str(exc))
 
 
+def _source_id_arg(args: Dict[str, Any], tool_name: str) -> str:
+    source_id = str(args.get("source_id") or "").strip()
+    if not source_id:
+        raise ValueError(f"{tool_name} requires 'source_id'")
+    return source_id
+
+
+def _source_from_manifest(manifest: Dict[str, Any], source_id: str) -> Dict[str, Any]:
+    return next((item for item in manifest.get("sources", []) if item.get("id") == source_id), None)
+
+
 def source_manifest(args: Dict[str, Any]) -> Dict[str, Any]:
     workspace = _workspace(args)
     manifest = load_manifest(workspace)
@@ -326,6 +338,103 @@ def source_normalize(args: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
+def _replace_first_markdown_heading(body: str, title: str) -> str:
+    lines = body.splitlines()
+    for index, line in enumerate(lines):
+        if line.startswith("# "):
+            lines[index] = f"# {title}"
+            return _ensure_trailing_newline("\n".join(lines))
+        if line.strip():
+            break
+    if body.strip():
+        return _ensure_trailing_newline(f"# {title}\n\n{body.strip()}")
+    return _ensure_trailing_newline(f"# {title}")
+
+
+def _load_source_metadata(workspace: Path, entry: SourceEntry) -> Dict[str, Any]:
+    metadata_path = resolve_workspace_path(workspace, entry.metadata_path)
+    if not metadata_path.exists():
+        return {}
+    return json.loads(metadata_path.read_text(encoding="utf-8"))
+
+
+def source_rename(args: Dict[str, Any]) -> Dict[str, Any]:
+    workspace = _workspace(args)
+    try:
+        source_id = _source_id_arg(args, "source_rename")
+        title = str(args.get("title") or "").strip()
+        if not title:
+            return failure("source_rename requires 'title'")
+        manifest = load_manifest(workspace)
+        source = _source_from_manifest(manifest, source_id)
+        if not source:
+            return failure(f"source not found: {source_id}")
+        entry = SourceEntry(**source)
+        updated = SourceEntry(
+            id=entry.id,
+            title=title,
+            kind=entry.kind,
+            original_path=entry.original_path,
+            source_path=entry.source_path,
+            metadata_path=entry.metadata_path,
+            chunks_path=entry.chunks_path,
+        )
+        source_path = resolve_workspace_path(workspace, entry.source_path)
+        if not source_path.exists():
+            return failure(f"normalized source file missing: {entry.source_path}")
+        body = _replace_first_markdown_heading(
+            source_path.read_text(encoding="utf-8", errors="replace"),
+            title,
+        )
+        metadata = {
+            **_load_source_metadata(workspace, entry),
+            "id": updated.id,
+            "title": updated.title,
+            "kind": updated.kind,
+            "original_path": updated.original_path,
+            "source_path": updated.source_path,
+            "metadata_path": updated.metadata_path,
+            "chunks_path": updated.chunks_path,
+        }
+        chunks = _write_source_files(workspace, updated, body, metadata)
+        next_manifest = upsert_source(manifest, updated)
+        save_manifest(workspace, next_manifest)
+        return success(
+            f"Renamed notebook source '{entry.title}' to '{title}'.",
+            {"source": updated.to_dict(), "chunk_count": len(chunks), "manifest": next_manifest},
+        )
+    except Exception as exc:
+        return failure(str(exc))
+
+
+def source_remove(args: Dict[str, Any]) -> Dict[str, Any]:
+    workspace = _workspace(args)
+    try:
+        source_id = _source_id_arg(args, "source_remove")
+        manifest = load_manifest(workspace)
+        source = _source_from_manifest(manifest, source_id)
+        if not source:
+            return failure(f"source not found: {source_id}")
+        entry = SourceEntry(**source)
+        dirs = ensure_notebook_dirs(workspace)
+        source_dir = resolve_workspace_path(workspace, f"notebook-sources/{entry.id}")
+        if source_dir.parent != dirs.sources_dir:
+            return failure(f"refusing to remove source outside notebook-sources: {entry.id}")
+        if source_dir.exists():
+            shutil.rmtree(source_dir)
+        next_manifest = {
+            "version": manifest.get("version", 1),
+            "sources": [item for item in manifest.get("sources", []) if item.get("id") != source_id],
+        }
+        save_manifest(workspace, next_manifest)
+        return success(
+            f"Removed notebook source '{entry.title}'.",
+            {"removed": entry.to_dict(), "manifest": next_manifest},
+        )
+    except Exception as exc:
+        return failure(str(exc))
+
+
 def handle_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if tool_name == "source_import":
         return source_import(args)
@@ -333,4 +442,8 @@ def handle_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         return source_normalize(args)
     if tool_name == "source_manifest":
         return source_manifest(args)
+    if tool_name == "source_rename":
+        return source_rename(args)
+    if tool_name == "source_remove":
+        return source_remove(args)
     return failure(f"unknown mofa-notebook-source tool: {tool_name}")

@@ -53,6 +53,35 @@
       }
     },
     {
+      "name": "source_rename",
+      "description": "Rename an existing notebook source. Updates notebook-sources/manifest.json, metadata.json, source.md, and chunks.jsonl without changing the original uploaded file.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string", "description": "Workspace root. Defaults to current directory." },
+          "workspace_root": { "type": "string", "description": "Host-injected current workspace root." },
+          "source_id": { "type": "string", "description": "Notebook source id from notebook-sources/manifest.json." },
+          "title": { "type": "string", "description": "New human-readable source title." }
+        },
+        "required": ["source_id", "title"],
+        "x-octos-host-config-keys": ["workspace_root"]
+      }
+    },
+    {
+      "name": "source_remove",
+      "description": "Remove an existing notebook source from notebook-sources/manifest.json and delete its normalized notebook-sources/<source_id>/ directory. The original uploaded file is left intact.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string", "description": "Workspace root. Defaults to current directory." },
+          "workspace_root": { "type": "string", "description": "Host-injected current workspace root." },
+          "source_id": { "type": "string", "description": "Notebook source id from notebook-sources/manifest.json." }
+        },
+        "required": ["source_id"],
+        "x-octos-host-config-keys": ["workspace_root"]
+      }
+    },
+    {
       "name": "source_manifest",
       "description": "Return the current notebook source manifest and source count.",
       "input_schema": {
@@ -99,6 +128,47 @@
         "input_mode": "file_each",
         "file_argument": "path",
         "file_materialization": "workspace_relative"
+      }
+    },
+    {
+      "id": "source.rename",
+      "label": "Rename source",
+      "description": "Rename an imported notebook source.",
+      "tags": ["source", "document"],
+      "surfaces": ["studio.sources"],
+      "execution": "sync",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_id": { "type": "string" },
+          "title": { "type": "string" }
+        },
+        "required": ["source_id", "title"]
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "source_rename",
+        "input_mode": "single"
+      }
+    },
+    {
+      "id": "source.remove",
+      "label": "Remove source",
+      "description": "Remove an imported notebook source from grounding.",
+      "tags": ["source", "document"],
+      "surfaces": ["studio.sources"],
+      "execution": "sync",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_id": { "type": "string" }
+        },
+        "required": ["source_id"]
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "source_remove",
+        "input_mode": "single"
       }
     }
   ]
