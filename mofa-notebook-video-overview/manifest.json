@@ -144,5 +144,50 @@
       ],
       "concurrency_class": "exclusive"
     }
+  ],
+  "actions": [
+    {
+      "id": "video_overview.generate",
+      "label": "Video Overview",
+      "description": "Generate a source-grounded video overview from selected notebook sources.",
+      "tags": ["notebook", "artifact", "video"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "style": {
+            "type": "string"
+          },
+          "duration_minutes": {
+            "type": "integer"
+          },
+          "language": {
+            "type": "string"
+          },
+          "render_video": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "video"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "video_overview_generate",
+        "input_mode": "single"
+      }
+    }
   ]
 }

@@ -243,5 +243,106 @@
       ],
       "concurrency_class": "exclusive"
     }
+  ],
+  "actions": [
+    {
+      "id": "reports.generate",
+      "label": "Reports",
+      "description": "Generate a source-grounded report or study guide from selected notebook sources.",
+      "tags": ["notebook", "artifact", "study"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "focus": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "report"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "study_guide_generate",
+        "input_mode": "single"
+      }
+    },
+    {
+      "id": "quiz.generate",
+      "label": "Quiz",
+      "description": "Generate a source-grounded quiz from selected notebook sources.",
+      "tags": ["notebook", "artifact", "study"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "focus": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "quiz"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "quiz_generate",
+        "input_mode": "single"
+      }
+    },
+    {
+      "id": "flashcards.generate",
+      "label": "Flashcards",
+      "description": "Generate source-grounded flashcards from selected notebook sources.",
+      "tags": ["notebook", "artifact", "study"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "focus": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "flashcards"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "flashcards_generate",
+        "input_mode": "single"
+      }
+    }
   ]
 }

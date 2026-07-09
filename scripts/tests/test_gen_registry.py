@@ -63,6 +63,46 @@ class RegistryGenerationTests(unittest.TestCase):
             }.issubset(set(source_import_tool.get("env", [])))
         )
 
+    def test_notebook_generation_skills_advertise_studio_actions(self):
+        expected = {
+            "mofa-notebook-study": {
+                "reports.generate": "study_guide_generate",
+                "quiz.generate": "quiz_generate",
+                "flashcards.generate": "flashcards_generate",
+            },
+            "mofa-notebook-mindmap": {
+                "mindmap.generate": "mindmap_generate",
+            },
+            "mofa-notebook-data-table": {
+                "data_table.generate": "data_table_generate",
+            },
+            "mofa-notebook-video-overview": {
+                "video_overview.generate": "video_overview_generate",
+            },
+        }
+
+        for skill_name, expected_actions in expected.items():
+            with self.subTest(skill_name=skill_name):
+                manifest = json.loads(
+                    (ROOT / skill_name / "manifest.json").read_text(encoding="utf-8")
+                )
+                actions = {
+                    action.get("id"): action
+                    for action in manifest.get("actions", [])
+                }
+                self.assertEqual(set(actions), set(expected_actions))
+                for action_id, tool_name in expected_actions.items():
+                    action = actions[action_id]
+                    self.assertEqual(action.get("execution"), "background")
+                    self.assertIn("studio.skills", action.get("surfaces", []))
+                    self.assertIn("notebook", action.get("tags", []))
+                    self.assertEqual(action["binding"]["tool"], tool_name)
+                    self.assertEqual(action["binding"]["input_mode"], "single")
+                    self.assertEqual(
+                        action["input_schema"]["properties"]["source_ids"]["items"]["type"],
+                        "string",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

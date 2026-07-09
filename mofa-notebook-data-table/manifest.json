@@ -80,5 +80,46 @@
       "concurrency_class": "exclusive"
     }
   ],
+  "actions": [
+    {
+      "id": "data_table.generate",
+      "label": "Data Table",
+      "description": "Generate a cited data table from selected notebook sources.",
+      "tags": ["notebook", "artifact", "table"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "max_rows": {
+            "type": "integer"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "data_table"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "data_table_generate",
+        "input_mode": "single"
+      }
+    }
+  ],
   "sha256": "b5a3bddb203ade0f728cf75798752efd9f0a02afb72767b80683a5cf99ccebc1"
 }

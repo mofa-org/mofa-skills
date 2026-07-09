@@ -69,5 +69,43 @@
       ],
       "concurrency_class": "exclusive"
     }
+  ],
+  "actions": [
+    {
+      "id": "mindmap.generate",
+      "label": "Mind Map",
+      "description": "Generate a source-grounded mind map from selected notebook sources.",
+      "tags": ["notebook", "artifact", "mindmap"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "focus": {
+            "type": "string"
+          },
+          "max_nodes": {
+            "type": "integer"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "mindmap"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "mindmap_generate",
+        "input_mode": "single"
+      }
+    }
   ]
 }
