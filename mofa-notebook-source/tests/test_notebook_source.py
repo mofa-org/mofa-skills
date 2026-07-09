@@ -1,13 +1,16 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "notebook_common"))
 sys.path.insert(0, str(ROOT / "mofa-notebook-source" / "src"))
 
+import notebook_source
 from notebook_source import handle_tool
 
 
@@ -176,20 +179,117 @@ class NotebookSourceTests(unittest.TestCase):
             self.assertFalse(result["success"])
             self.assertIn("must not contain '..'", result["output"])
 
+    def test_source_import_routes_supported_multiformat_extensions(self):
+        gemini_calls = []
+        office_calls = []
+
+        def normalized(kind, label):
+            return {
+                "kind": kind,
+                "raw_markdown": f"{label} raw\n",
+                "summary_markdown": f"{label} summary\n",
+                "source_markdown": (
+                    "# Routed Source\n\n"
+                    "## Raw Extracted Content\n\n"
+                    f"{label} raw\n\n"
+                    "## AI Summary / Description\n\n"
+                    f"{label} summary\n"
+                ),
+                "warnings": [],
+                "provenance": {"normalizer": label},
+            }
+
+        def fake_gemini(path, kind, title):
+            gemini_calls.append((path.name, kind, title))
+            return normalized(kind, f"gemini {path.suffix.lower()}")
+
+        def fake_office(path, title):
+            office_calls.append((path.name, title))
+            return normalized(path.suffix.lower().lstrip("."), f"office {path.suffix.lower()}")
+
+        previous_gemini = getattr(notebook_source, "normalize_with_gemini", None)
+        previous_office = getattr(notebook_source, "normalize_office_file", None)
+        notebook_source.normalize_with_gemini = fake_gemini
+        notebook_source.normalize_office_file = fake_office
+        try:
+            cases = [
+                ("report.pdf", "pdf", "gemini"),
+                ("photo.jpg", "image", "gemini"),
+                ("scan.png", "image", "gemini"),
+                ("audio.mp3", "audio", "gemini"),
+                ("movie.mp4", "video", "gemini"),
+                ("doc.docx", "docx", "office"),
+                ("slides.pptx", "pptx", "office"),
+                ("table.xlsx", "xlsx", "office"),
+            ]
+            for filename, expected_kind, route in cases:
+                with self.subTest(filename=filename):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        workspace = Path(tmp)
+                        (workspace / "uploads").mkdir()
+                        (workspace / "uploads" / filename).write_bytes(b"fixture")
+
+                        result = handle_tool(
+                            "source_import",
+                            {
+                                "workspace": str(workspace),
+                                "path": f"uploads/{filename}",
+                                "title": f"{expected_kind} Source",
+                            },
+                        )
+
+                        self.assertTrue(result["success"], result)
+                        self.assertEqual(result["data"]["source"]["kind"], expected_kind)
+                        source_dir = workspace / "notebook-sources" / result["data"]["source"]["id"]
+                        metadata = json.loads((source_dir / "metadata.json").read_text(encoding="utf-8"))
+                        self.assertEqual(metadata["kind"], expected_kind)
+                        self.assertTrue((source_dir / "raw.md").is_file())
+                        self.assertTrue((source_dir / "summary.md").is_file())
+                        if route == "gemini":
+                            self.assertIn((filename, expected_kind, f"{expected_kind} Source"), gemini_calls)
+                        else:
+                            self.assertIn((filename, f"{expected_kind} Source"), office_calls)
+        finally:
+            if previous_gemini is None:
+                delattr(notebook_source, "normalize_with_gemini")
+            else:
+                notebook_source.normalize_with_gemini = previous_gemini
+            if previous_office is None:
+                delattr(notebook_source, "normalize_office_file")
+            else:
+                notebook_source.normalize_office_file = previous_office
+
+    def test_source_import_requires_gemini_key_for_pdf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "uploads").mkdir()
+            (workspace / "uploads" / "report.pdf").write_bytes(b"%PDF-1.7")
+
+            with patch.dict(os.environ, {}, clear=True):
+                result = handle_tool(
+                    "source_import",
+                    {"workspace": str(workspace), "path": "uploads/report.pdf", "title": "Report"},
+                )
+
+            self.assertFalse(result["success"])
+            self.assertIn("GEMINI_API_KEY", result["output"])
+            self.assertIn(".pdf", result["output"])
+
     def test_source_import_reports_unsupported_binary_formats(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
             (workspace / "uploads").mkdir()
-            (workspace / "uploads" / "slides.pptx").write_bytes(b"PK\x03\x04")
+            (workspace / "uploads" / "archive.bin").write_bytes(b"\x00\x01")
 
             result = handle_tool(
                 "source_import",
-                {"workspace": str(workspace), "path": "uploads/slides.pptx", "title": "Slides"},
+                {"workspace": str(workspace), "path": "uploads/archive.bin", "title": "Archive"},
             )
 
             self.assertFalse(result["success"])
             self.assertIn("unsupported", result["output"].lower())
-            self.assertIn("specialized skill", result["output"])
+            self.assertIn(".bin", result["output"])
+            self.assertIn("Supported:", result["output"])
 
 
 if __name__ == "__main__":

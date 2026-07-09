@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 from notebook_common.chunking import chunk_markdown
 from notebook_common.output import write_jsonl
 from notebook_common.paths import ensure_notebook_dirs, resolve_workspace_path, workspace_from_args
+from gemini_source import normalize_with_gemini
+from local_normalizers import normalize_office_file
 from notebook_common.sources import (
     SourceEntry,
     load_manifest,
@@ -18,6 +20,12 @@ from notebook_common.sources import (
 
 
 TEXT_EXTENSIONS = {".txt", ".md", ".markdown", ".csv", ".json", ".html", ".htm"}
+OFFICE_EXTENSIONS = {".docx", ".pptx", ".xlsx", ".xlsm"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg"}
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
+GEMINI_EXTENSIONS = {".pdf", *IMAGE_EXTENSIONS, *AUDIO_EXTENSIONS, *VIDEO_EXTENSIONS}
+SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | OFFICE_EXTENSIONS | GEMINI_EXTENSIONS
 
 
 def success(output: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -86,13 +94,39 @@ def _compose_source_markdown(title: str, raw_markdown: str, summary_markdown: st
     )
 
 
-def _normalize_content(path: Path, title: str) -> Dict[str, Any]:
+def _supported_extensions_text() -> str:
+    return ", ".join(sorted(SUPPORTED_EXTENSIONS))
+
+
+def _unsupported_source_format_message(ext: str) -> str:
+    return f"Unsupported source format '{ext or '<none>'}'. Supported: {_supported_extensions_text()}"
+
+
+def _complete_normalized_source(title: str, normalized: Dict[str, Any]) -> Dict[str, Any]:
+    kind = str(normalized.get("kind") or "source")
+    raw_markdown = _ensure_trailing_newline(str(normalized.get("raw_markdown") or ""))
+    summary_markdown = normalized.get("summary_markdown")
+    if summary_markdown is None:
+        summary_markdown = _local_summary_markdown(title, kind, raw_markdown)
+    else:
+        summary_markdown = _ensure_trailing_newline(str(summary_markdown))
+    source_markdown = normalized.get("source_markdown")
+    if source_markdown is None:
+        source_markdown = _compose_source_markdown(title, raw_markdown, summary_markdown)
+    else:
+        source_markdown = _ensure_trailing_newline(str(source_markdown))
+    return {
+        "kind": kind,
+        "raw_markdown": raw_markdown,
+        "summary_markdown": summary_markdown,
+        "source_markdown": source_markdown,
+        "warnings": list(normalized.get("warnings") or []),
+        "provenance": dict(normalized.get("provenance") or {}),
+    }
+
+
+def _normalize_text_content(path: Path, title: str) -> Dict[str, Any]:
     ext = path.suffix.lower()
-    if ext not in TEXT_EXTENSIONS:
-        raise ValueError(
-            f"Unsupported source format '{ext or '<none>'}'. Use a specialized skill to convert "
-            "this file into Markdown or text first, then import the converted file as a notebook source."
-        )
     raw = _read_text_file(path)
     if ext in {".md", ".markdown"}:
         raw_markdown = raw
@@ -110,17 +144,48 @@ def _normalize_content(path: Path, title: str) -> Dict[str, Any]:
     else:
         raw_markdown = raw
         kind = "text"
-    raw_markdown = _ensure_trailing_newline(raw_markdown)
-    summary_markdown = _local_summary_markdown(title, kind, raw_markdown)
-    source_markdown = _compose_source_markdown(title, raw_markdown, summary_markdown)
-    return {
-        "kind": kind,
-        "raw_markdown": raw_markdown,
-        "summary_markdown": summary_markdown,
-        "source_markdown": source_markdown,
-        "warnings": [],
-        "provenance": {"normalizer": "local_text", "extension": ext or None},
-    }
+    return _complete_normalized_source(
+        title,
+        {
+            "kind": kind,
+            "raw_markdown": raw_markdown,
+            "warnings": [],
+            "provenance": {"normalizer": "local_text", "extension": ext or None},
+        },
+    )
+
+
+def _gemini_kind_for_extension(ext: str) -> str:
+    if ext == ".pdf":
+        return "pdf"
+    if ext in IMAGE_EXTENSIONS:
+        return "image"
+    if ext in AUDIO_EXTENSIONS:
+        return "audio"
+    if ext in VIDEO_EXTENSIONS:
+        return "video"
+    return ext.lstrip(".") or "source"
+
+
+def _normalize_gemini_content(path: Path, title: str, ext: str) -> Dict[str, Any]:
+    kind = _gemini_kind_for_extension(ext)
+    try:
+        return _complete_normalized_source(title, normalize_with_gemini(path, kind, title))
+    except ValueError as exc:
+        if "GEMINI_API_KEY" in str(exc):
+            raise ValueError(f"This source format requires GEMINI_API_KEY for notebook import: {ext}") from exc
+        raise
+
+
+def _normalize_content(path: Path, title: str) -> Dict[str, Any]:
+    ext = path.suffix.lower()
+    if ext in TEXT_EXTENSIONS:
+        return _normalize_text_content(path, title)
+    if ext in OFFICE_EXTENSIONS:
+        return _complete_normalized_source(title, normalize_office_file(path, title))
+    if ext in GEMINI_EXTENSIONS:
+        return _normalize_gemini_content(path, title, ext)
+    raise ValueError(_unsupported_source_format_message(ext))
 
 
 def _source_sibling_path(entry: SourceEntry, filename: str) -> str:
