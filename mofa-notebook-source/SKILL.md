@@ -25,6 +25,30 @@ Use workspace-relative paths only, such as `uploads/report.md` or
 
 ## Supported V1 Inputs
 
-`source_import` supports text, Markdown, CSV, JSON, and simple HTML. For PDF,
-DOCX, PPTX, XLSX, or other binary files, first convert the file to Markdown or
-text with a specialized skill, then import the converted file.
+`source_import` accepts:
+
+- Text-like files: `.md`, `.markdown`, `.txt`, `.csv`, `.json`, `.html`, `.htm`
+- Office files: `.docx`, `.pptx`, `.xlsx`, `.xlsm`
+- PDF: `.pdf`
+- Images: `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`
+- Audio: `.mp3`, `.wav`, `.m4a`, `.aac`, `.ogg`
+- Video: `.mp4`, `.mov`, `.webm`, `.mkv`
+
+Text-like files and Office files are normalized locally. PDF, image, audio,
+and video files are normalized through Gemini and require `GEMINI_API_KEY`.
+Set `GEMINI_MODEL` to override the default model, and `GEMINI_BASE_URL` only
+when using a compatible custom endpoint.
+
+## Source Output Contract
+
+Each imported source writes a stable dual-layer source directory:
+
+- `notebook-sources/<source_id>/raw.md`: raw extracted content.
+- `notebook-sources/<source_id>/summary.md`: AI summary or semantic description.
+- `notebook-sources/<source_id>/source.md`: combined source used for chunking and grounding.
+- `notebook-sources/<source_id>/chunks.jsonl`: chunk index for search.
+- `notebook-sources/<source_id>/metadata.json`: provenance, layer paths, warnings, and source metadata.
+
+The workspace-level `notebook-sources/manifest.json` is updated after a
+successful import. If a format cannot be read faithfully, the skill should
+record limitations in metadata warnings rather than silently dropping them.

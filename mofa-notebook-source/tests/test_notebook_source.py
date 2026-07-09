@@ -16,6 +16,15 @@ from notebook_source import handle_tool
 
 class NotebookSourceTests(unittest.TestCase):
     def test_manifest_declares_source_import_action_with_workspace_paths(self):
+        expected_accept = [
+            ".md", ".markdown", ".txt", ".csv", ".json", ".html", ".htm",
+            ".docx", ".pptx", ".xlsx", ".xlsm",
+            ".pdf",
+            ".jpg", ".jpeg", ".png", ".webp", ".gif",
+            ".mp3", ".wav", ".m4a", ".aac", ".ogg",
+            ".mp4", ".mov", ".webm", ".mkv",
+        ]
+
         manifest = json.loads(
             (ROOT / "mofa-notebook-source" / "manifest.json").read_text(encoding="utf-8")
         )
@@ -25,11 +34,20 @@ class NotebookSourceTests(unittest.TestCase):
             None,
         )
 
+        source_import_tool = next(
+            (item for item in manifest.get("tools", []) if item.get("name") == "source_import"),
+            None,
+        )
+
         self.assertIsNotNone(action)
+        self.assertIsNotNone(source_import_tool)
+        self.assertEqual(action.get("execution"), "background")
         self.assertEqual(action["binding"]["tool"], "source_import")
         self.assertEqual(action["binding"]["input_mode"], "file_each")
         self.assertEqual(action["binding"]["file_argument"], "path")
         self.assertEqual(action["binding"]["file_materialization"], "workspace_relative")
+        self.assertEqual(action["ui_schema"]["accept"], expected_accept)
+        self.assertTrue({"GEMINI_API_KEY", "GEMINI_MODEL"}.issubset(set(source_import_tool.get("env", []))))
 
     def test_source_import_creates_normalized_source_manifest_and_chunks(self):
         with tempfile.TemporaryDirectory() as tmp:
