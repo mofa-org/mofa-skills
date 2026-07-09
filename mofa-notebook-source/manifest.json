@@ -23,7 +23,19 @@
       "env": [
         "GEMINI_API_KEY",
         "GEMINI_MODEL",
-        "GEMINI_BASE_URL"
+        "GEMINI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "VERTEX_SA_JSON",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "MOFA_NOTEBOOK_SOURCE_PROVIDER",
+        "MOFA_NOTEBOOK_SOURCE_MODEL",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL"
       ]
     },
     {

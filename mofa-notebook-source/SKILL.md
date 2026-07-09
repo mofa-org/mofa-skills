@@ -35,9 +35,13 @@ Use workspace-relative paths only, such as `uploads/report.md` or
 - Video: `.mp4`, `.mov`, `.webm`, `.mkv`
 
 Text-like files and Office files are normalized locally. PDF, image, audio,
-and video files are normalized through Gemini and require `GEMINI_API_KEY`.
-Set `GEMINI_MODEL` to override the default model, and `GEMINI_BASE_URL` only
-when using a compatible custom endpoint.
+and video files are normalized through Gemini-compatible multimodal generation.
+Use `GEMINI_API_KEY` for Gemini API, or Vertex AI with
+`GOOGLE_APPLICATION_CREDENTIALS`, `VERTEX_SA_JSON`, `VERTEX_ACCESS_TOKEN`, or
+`GOOGLE_OAUTH_ACCESS_TOKEN`. Set `GEMINI_MODEL`, `MOFA_NOTEBOOK_MODEL`, or
+`MOFA_NOTEBOOK_SOURCE_MODEL` to override the default model. Optional endpoint
+settings are `GEMINI_BASE_URL`, `VERTEX_BASE_URL`, `GOOGLE_CLOUD_LOCATION`, and
+`VERTEX_LOCATION`.
 
 ## Source Output Contract
 

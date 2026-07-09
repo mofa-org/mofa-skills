@@ -172,8 +172,17 @@ def _normalize_gemini_content(path: Path, title: str, ext: str) -> Dict[str, Any
     try:
         return _complete_normalized_source(title, normalize_with_gemini(path, kind, title))
     except ValueError as exc:
-        if "GEMINI_API_KEY" in str(exc):
-            raise ValueError(f"This source format requires GEMINI_API_KEY for notebook import: {ext}") from exc
+        message = str(exc)
+        if (
+            "GEMINI_API_KEY" in message
+            or "VERTEX_SA_JSON" in message
+            or "GOOGLE_APPLICATION_CREDENTIALS" in message
+        ):
+            raise ValueError(
+                "This source format requires GEMINI_API_KEY or Vertex credentials "
+                "(GOOGLE_APPLICATION_CREDENTIALS, VERTEX_SA_JSON, VERTEX_ACCESS_TOKEN, "
+                f"or GOOGLE_OAUTH_ACCESS_TOKEN) for notebook import: {ext}"
+            ) from exc
         raise
 
 

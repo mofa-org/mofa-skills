@@ -47,7 +47,15 @@ class NotebookSourceTests(unittest.TestCase):
         self.assertEqual(action["binding"]["file_argument"], "path")
         self.assertEqual(action["binding"]["file_materialization"], "workspace_relative")
         self.assertEqual(action["ui_schema"]["accept"], expected_accept)
-        self.assertTrue({"GEMINI_API_KEY", "GEMINI_MODEL"}.issubset(set(source_import_tool.get("env", []))))
+        self.assertTrue(
+            {
+                "GEMINI_API_KEY",
+                "GEMINI_MODEL",
+                "GOOGLE_APPLICATION_CREDENTIALS",
+                "VERTEX_SA_JSON",
+                "VERTEX_ACCESS_TOKEN",
+            }.issubset(set(source_import_tool.get("env", [])))
+        )
 
     def test_source_import_creates_normalized_source_manifest_and_chunks(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -277,7 +285,7 @@ class NotebookSourceTests(unittest.TestCase):
             else:
                 notebook_source.normalize_office_file = previous_office
 
-    def test_source_import_requires_gemini_key_for_pdf(self):
+    def test_source_import_requires_model_credentials_for_pdf(self):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
             (workspace / "uploads").mkdir()
@@ -291,6 +299,7 @@ class NotebookSourceTests(unittest.TestCase):
 
             self.assertFalse(result["success"])
             self.assertIn("GEMINI_API_KEY", result["output"])
+            self.assertIn("VERTEX_SA_JSON", result["output"])
             self.assertIn(".pdf", result["output"])
 
     def test_source_import_reports_unsupported_binary_formats(self):

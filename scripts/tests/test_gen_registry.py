@@ -53,7 +53,15 @@ class RegistryGenerationTests(unittest.TestCase):
         self.assertEqual(action["binding"]["tool"], "source_import")
         self.assertEqual(action["binding"]["input_mode"], "file_each")
         self.assertEqual(action["ui_schema"]["accept"], MULTIFORMAT_SOURCE_ACCEPT)
-        self.assertTrue({"GEMINI_API_KEY", "GEMINI_MODEL"}.issubset(set(source_import_tool.get("env", []))))
+        self.assertTrue(
+            {
+                "GEMINI_API_KEY",
+                "GEMINI_MODEL",
+                "GOOGLE_APPLICATION_CREDENTIALS",
+                "VERTEX_SA_JSON",
+                "VERTEX_ACCESS_TOKEN",
+            }.issubset(set(source_import_tool.get("env", [])))
+        )
 
 
 if __name__ == "__main__":
