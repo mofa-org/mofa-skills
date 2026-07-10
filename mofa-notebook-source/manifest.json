@@ -92,6 +92,18 @@
         },
         "x-octos-host-config-keys": ["workspace_root"]
       }
+    },
+    {
+      "name": "source_list",
+      "description": "Return the authoritative workspace source catalog with stable preview, timestamp, media type, and retry metadata.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": { "type": "string", "description": "Workspace root. Defaults to current directory." },
+          "workspace_root": { "type": "string", "description": "Host-injected current workspace root." }
+        },
+        "x-octos-host-config-keys": ["workspace_root"]
+      }
     }
   ],
   "actions": [
@@ -128,6 +140,23 @@
         "input_mode": "file_each",
         "file_argument": "path",
         "file_materialization": "workspace_relative"
+      }
+    },
+    {
+      "id": "source.list",
+      "label": "List sources",
+      "description": "Return the authoritative imported source catalog for this workspace.",
+      "tags": ["source", "document"],
+      "surfaces": ["studio.sources"],
+      "execution": "sync",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "source_list",
+        "input_mode": "single"
       }
     },
     {

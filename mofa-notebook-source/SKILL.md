@@ -19,6 +19,7 @@ listed in `notebook-sources/manifest.json`.
 3. Use `mofa-notebook-grounding` tools for source search, lookup, and citations.
 4. Call `source_rename` when the user changes the display title of an imported source.
 5. Call `source_remove` when the user removes an imported source from notebook grounding.
+6. Call `source_list` for the authoritative current source catalog; job history is not source state.
 
 ## Source Paths
 

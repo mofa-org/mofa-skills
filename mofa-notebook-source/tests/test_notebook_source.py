@@ -37,6 +37,7 @@ class NotebookSourceTests(unittest.TestCase):
 
         self.assertIn("source.rename", action_ids)
         self.assertIn("source.remove", action_ids)
+        self.assertIn("source.list", action_ids)
 
         source_import_tool = next(
             (item for item in manifest.get("tools", []) if item.get("name") == "source_import"),
@@ -227,6 +228,61 @@ class NotebookSourceTests(unittest.TestCase):
             self.assertTrue(result["success"])
             self.assertEqual(result["data"]["source_count"], 1)
             self.assertEqual(result["data"]["sources"][0]["title"], "Notes")
+
+    def test_source_list_is_authoritative_across_rename_remove_and_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "uploads").mkdir()
+            (workspace / "uploads" / "notes.txt").write_text("alpha beta", encoding="utf-8")
+            imported = handle_tool(
+                "source_import",
+                {"workspace": str(workspace), "path": "uploads/notes.txt", "title": "Notes"},
+            )
+            self.assertTrue(imported["success"], imported)
+
+            listed = handle_tool("source_list", {"workspace": str(workspace)})
+            self.assertTrue(listed["success"], listed)
+            self.assertEqual(listed["data"]["source_count"], 1)
+            source = listed["data"]["sources"][0]
+            self.assertEqual(source["id"], "notes")
+            self.assertEqual(source["display_name"], "Notes")
+            self.assertEqual(source["media_type"], "text/plain")
+            self.assertEqual(source["preview_path"], "uploads/notes.txt")
+            self.assertTrue(source["created_at"])
+            self.assertTrue(source["updated_at"])
+            self.assertEqual(source["retry_input"]["path"], "uploads/notes.txt")
+
+            renamed = handle_tool(
+                "source_rename",
+                {"workspace": str(workspace), "source_id": "notes", "title": "Renamed Notes"},
+            )
+            self.assertTrue(renamed["success"], renamed)
+            restarted_view = handle_tool("source_list", {"workspace": str(workspace)})
+            self.assertEqual(restarted_view["data"]["sources"][0]["display_name"], "Renamed Notes")
+
+            removed = handle_tool(
+                "source_remove", {"workspace": str(workspace), "source_id": "notes"}
+            )
+            self.assertTrue(removed["success"], removed)
+            self.assertEqual(
+                handle_tool("source_list", {"workspace": str(workspace)})["data"]["sources"],
+                [],
+            )
+
+    def test_source_list_omits_retry_input_when_original_file_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace = Path(tmp)
+            (workspace / "uploads").mkdir()
+            original = workspace / "uploads" / "notes.txt"
+            original.write_text("alpha beta", encoding="utf-8")
+            handle_tool(
+                "source_import",
+                {"workspace": str(workspace), "path": "uploads/notes.txt", "title": "Notes"},
+            )
+            original.unlink()
+
+            source = handle_tool("source_list", {"workspace": str(workspace)})["data"]["sources"][0]
+            self.assertIsNone(source["retry_input"])
 
     def test_source_import_uses_workspace_root_when_workspace_is_absent(self):
         with tempfile.TemporaryDirectory() as tmp:

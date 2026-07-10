@@ -1,7 +1,9 @@
 import html
 import json
+import mimetypes
 import re
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 
@@ -39,6 +41,16 @@ def failure(message: str) -> Dict[str, Any]:
 
 def _workspace(args: Dict[str, Any]) -> Path:
     return workspace_from_args(args)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _timestamp_for_path(path: Path) -> str:
+    return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat().replace(
+        "+00:00", "Z"
+    )
 
 
 def _read_text_file(path: Path) -> str:
@@ -242,7 +254,13 @@ def source_import(args: Dict[str, Any]) -> Dict[str, Any]:
         source_id = slugify(str(args.get("source_id") or title))
         normalized = _normalize_content(input_path, title)
         kind = str(args.get("kind") or normalized["kind"])
+        manifest = load_manifest(workspace)
         entry = source_entry_for(workspace, source_id, title, kind, str(path_arg))
+        existing = _source_from_manifest(manifest, source_id)
+        existing_metadata = (
+            _load_source_metadata(workspace, SourceEntry(**existing)) if existing else {}
+        )
+        now = _utc_now()
         raw_path = _source_sibling_path(entry, "raw.md")
         summary_path = _source_sibling_path(entry, "summary.md")
         metadata = {
@@ -260,6 +278,8 @@ def source_import(args: Dict[str, Any]) -> Dict[str, Any]:
             },
             "warnings": normalized.get("warnings", []),
             "provenance": normalized.get("provenance", {}),
+            "created_at": existing_metadata.get("created_at") or now,
+            "updated_at": now,
         }
         chunks = _write_source_files(
             workspace,
@@ -269,7 +289,7 @@ def source_import(args: Dict[str, Any]) -> Dict[str, Any]:
             normalized["raw_markdown"],
             normalized["summary_markdown"],
         )
-        manifest = upsert_source(load_manifest(workspace), entry)
+        manifest = upsert_source(manifest, entry)
         save_manifest(workspace, manifest)
         return success(
             f"Imported notebook source '{title}' as {entry.source_path} with {len(chunks)} chunks.",
@@ -297,6 +317,55 @@ def source_manifest(args: Dict[str, Any]) -> Dict[str, Any]:
         f"Notebook source manifest contains {len(manifest.get('sources', []))} source(s).",
         {"source_count": len(manifest.get("sources", [])), "sources": manifest.get("sources", [])},
     )
+
+
+def _catalog_entry(workspace: Path, source: Dict[str, Any]) -> Dict[str, Any]:
+    entry = SourceEntry(**source)
+    metadata = _load_source_metadata(workspace, entry)
+    source_path = resolve_workspace_path(workspace, entry.source_path)
+    original_path = resolve_workspace_path(workspace, entry.original_path)
+    original_available = original_path.is_file()
+    preview_path = entry.original_path if original_available else entry.source_path
+    timestamp_path = source_path if source_path.exists() else resolve_workspace_path(
+        workspace, entry.metadata_path
+    )
+    fallback_timestamp = _timestamp_for_path(timestamp_path) if timestamp_path.exists() else _utc_now()
+    media_type = mimetypes.guess_type(entry.original_path)[0] or "application/octet-stream"
+    retry_input = None
+    if original_available:
+        retry_input = {
+            "path": entry.original_path,
+            "title": entry.title,
+            "kind": entry.kind,
+            "source_id": entry.id,
+        }
+    return {
+        **entry.to_dict(),
+        "display_name": entry.title,
+        "media_type": media_type,
+        "original_filename": Path(entry.original_path).name,
+        "preview_path": preview_path,
+        "created_at": metadata.get("created_at") or fallback_timestamp,
+        "updated_at": metadata.get("updated_at") or fallback_timestamp,
+        "warnings": list(metadata.get("warnings") or []),
+        "provenance": dict(metadata.get("provenance") or {}),
+        "retry_input": retry_input,
+    }
+
+
+def source_list(args: Dict[str, Any]) -> Dict[str, Any]:
+    workspace = _workspace(args)
+    try:
+        sources = [
+            _catalog_entry(workspace, source)
+            for source in load_manifest(workspace).get("sources", [])
+        ]
+        return success(
+            f"Notebook source catalog contains {len(sources)} source(s).",
+            {"source_count": len(sources), "sources": sources},
+        )
+    except Exception as exc:
+        return failure(str(exc))
 
 
 def source_normalize(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -395,6 +464,8 @@ def source_rename(args: Dict[str, Any]) -> Dict[str, Any]:
             "source_path": updated.source_path,
             "metadata_path": updated.metadata_path,
             "chunks_path": updated.chunks_path,
+            "created_at": _load_source_metadata(workspace, entry).get("created_at") or _utc_now(),
+            "updated_at": _utc_now(),
         }
         chunks = _write_source_files(workspace, updated, body, metadata)
         next_manifest = upsert_source(manifest, updated)
@@ -442,6 +513,8 @@ def handle_tool(tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         return source_normalize(args)
     if tool_name == "source_manifest":
         return source_manifest(args)
+    if tool_name == "source_list":
+        return source_list(args)
     if tool_name == "source_rename":
         return source_rename(args)
     if tool_name == "source_remove":
