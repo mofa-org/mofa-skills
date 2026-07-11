@@ -1212,7 +1212,7 @@ fn generate_tts_segment(
             let t = resp.text().unwrap_or_default();
             return Err(format!(
                 "Clone TTS error (HTTP): {}",
-                &t.chars().take(200).collect::<String>()
+                t.chars().take(200).collect::<String>()
             ));
         }
         let bytes = resp
@@ -1248,7 +1248,7 @@ fn generate_tts_segment(
             let t = resp.text().unwrap_or_default();
             return Err(format!(
                 "Preset TTS error (HTTP): {}",
-                &t.chars().take(200).collect::<String>()
+                t.chars().take(200).collect::<String>()
             ));
         }
         let bytes = resp

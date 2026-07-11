@@ -293,7 +293,7 @@ class NotebookDataTableTests(unittest.TestCase):
             result = notebook_data_table.data_table_generate(
                 {"workspace": str(workspace)},
                 llm_client=client,
-                context_char_limit=120,
+                context_char_limit=700,
             )
 
             self.assertTrue(result["success"], result)

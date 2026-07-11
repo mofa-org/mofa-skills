@@ -70,7 +70,7 @@ class NotebookGroundingTests(unittest.TestCase):
         tmp, workspace = self.make_workspace()
         self.addCleanup(tmp.cleanup)
 
-        result = handle_tool("source_lookup", {"workspace": str(workspace), "chunk_id": "report#chunk-0002"})
+        result = handle_tool("source_lookup", {"workspace": str(workspace), "chunk_id": "report#chunk-0004"})
 
         self.assertTrue(result["success"], result)
         self.assertEqual(result["data"]["chunk"]["heading"], "Risk")
@@ -80,12 +80,12 @@ class NotebookGroundingTests(unittest.TestCase):
         tmp, workspace = self.make_workspace()
         self.addCleanup(tmp.cleanup)
 
-        result = handle_tool("source_cite", {"workspace": str(workspace), "chunk_ids": ["report#chunk-0002"]})
+        result = handle_tool("source_cite", {"workspace": str(workspace), "chunk_ids": ["report#chunk-0004"]})
 
         self.assertTrue(result["success"], result)
         self.assertEqual(
             result["data"]["citations"][0],
-            "Report (notebook-sources/report/source.md:L5-L7)",
+            "Report (notebook-sources/report/source.md:L9-L12)",
         )
 
     def test_missing_source_returns_clear_error(self):

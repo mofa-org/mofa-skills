@@ -375,7 +375,7 @@ fn fix_bbox_from_font_size(overlays: &mut [TextOverlay]) {
                 "  bbox fix: fs={:.0}pt → {:.0}pt (capped) for {:?}",
                 fs,
                 MAX_FONT_SIZE,
-                &text.chars().take(30).collect::<String>()
+                text.chars().take(30).collect::<String>()
             );
             fs = MAX_FONT_SIZE;
             ov.font_size = Some(fs);
@@ -391,7 +391,7 @@ fn fix_bbox_from_font_size(overlays: &mut [TextOverlay]) {
                 expected_h,
                 fs,
                 num_lines as u32,
-                &text.chars().take(30).collect::<String>()
+                text.chars().take(30).collect::<String>()
             );
             ov.h = expected_h;
         }
