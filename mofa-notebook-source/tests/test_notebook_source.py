@@ -242,6 +242,7 @@ class NotebookSourceTests(unittest.TestCase):
 
             listed = handle_tool("source_list", {"workspace": str(workspace)})
             self.assertTrue(listed["success"], listed)
+            self.assertIn("structured_metadata", listed)
             self.assertEqual(listed["data"]["source_count"], 1)
             source = listed["data"]["sources"][0]
             self.assertEqual(source["id"], "notes")

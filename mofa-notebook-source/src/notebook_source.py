@@ -32,7 +32,12 @@ SUPPORTED_EXTENSIONS = TEXT_EXTENSIONS | OFFICE_EXTENSIONS | GEMINI_EXTENSIONS
 
 
 def success(output: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    return {"success": True, "output": output, "data": data}
+    return {
+        "success": True,
+        "output": output,
+        "data": data,
+        "structured_metadata": data,
+    }
 
 
 def failure(message: str) -> Dict[str, Any]:
