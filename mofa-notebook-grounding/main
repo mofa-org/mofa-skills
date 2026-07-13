@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "notebook_common"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
+from notebook_grounding import handle_tool
+
+
+def main() -> int:
+    if len(sys.argv) < 2:
+        print(json.dumps({"success": False, "output": "missing tool name"}))
+        return 1
+    try:
+        args = json.load(sys.stdin)
+    except json.JSONDecodeError as exc:
+        print(json.dumps({"success": False, "output": f"invalid JSON input: {exc}"}))
+        return 1
+    result = handle_tool(sys.argv[1], args)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result.get("success") else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+

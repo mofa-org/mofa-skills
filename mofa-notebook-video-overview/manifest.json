@@ -1,0 +1,193 @@
+{
+  "name": "mofa-notebook-video-overview",
+  "version": "0.1.0",
+  "description": "Generate source-grounded video overview scripts, scene plans, asset briefs, and handoff notes from normalized notebook sources.",
+  "skill_md_auto_inject": true,
+  "tools": [
+    {
+      "name": "video_overview_generate",
+      "description": "Generate a grounded video overview from notebook sources, then render a Veo 3.1 MP4 by default.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "style": {
+            "type": "string"
+          },
+          "duration_minutes": {
+            "type": "integer"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional output language."
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "openai",
+              "vertex"
+            ],
+            "description": "Optional model provider override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override."
+          },
+          "render_video": {
+            "type": "boolean",
+            "default": true,
+            "description": "Render a final MP4 with Veo after generating the grounded plan. Set false to create plan files only."
+          },
+          "video_model": {
+            "type": "string",
+            "description": "Optional Veo model override. Defaults to veo-3.1-generate-preview for Gemini API and veo-3.1-generate-001 for Vertex."
+          },
+          "video_duration_seconds": {
+            "type": "integer",
+            "enum": [
+              4,
+              6,
+              8
+            ],
+            "default": 8
+          },
+          "video_aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "16:9",
+              "9:16"
+            ],
+            "default": "16:9"
+          },
+          "video_resolution": {
+            "type": "string",
+            "enum": [
+              "720p",
+              "1080p",
+              "4k"
+            ],
+            "default": "720p"
+          },
+          "video_poll_interval_secs": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 10
+          },
+          "video_timeout_secs": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 420
+          },
+          "person_generation": {
+            "type": "string",
+            "enum": [
+              "allow_all",
+              "allow_adult",
+              "dont_allow"
+            ],
+            "description": "Optional Veo personGeneration policy."
+          },
+          "video_provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "vertex"
+            ],
+            "description": "Optional video rendering provider override. Defaults to Vertex when Vertex credentials are present, otherwise Gemini API."
+          },
+          "video_output_gcs_uri": {
+            "type": "string",
+            "description": "Optional Vertex output GCS prefix, for example gs://bucket/path/. The service account or access token must be able to read the rendered MP4."
+          }
+        },
+        "x-octos-host-config-keys": [
+          "workspace_root"
+        ]
+      },
+      "env": [
+        "GEMINI_API_KEY",
+        "GEMINI_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "VERTEX_SA_JSON",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL",
+        "MOFA_DATA_TABLE_PROVIDER",
+        "MOFA_DATA_TABLE_MODEL",
+        "MOFA_NOTEBOOK_VIDEO_MODEL",
+        "MOFA_VEO_MODEL",
+        "MOFA_NOTEBOOK_VIDEO_PROVIDER",
+        "MOFA_VEO_PROVIDER",
+        "MOFA_VEO_OUTPUT_GCS_URI",
+        "VERTEX_OUTPUT_GCS_URI"
+      ],
+      "concurrency_class": "exclusive"
+    }
+  ],
+  "actions": [
+    {
+      "id": "video_overview.generate",
+      "label": "Video Overview",
+      "description": "Generate a source-grounded video overview from selected notebook sources.",
+      "tags": ["notebook", "artifact", "video"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "style": {
+            "type": "string"
+          },
+          "duration_minutes": {
+            "type": "integer"
+          },
+          "language": {
+            "type": "string"
+          },
+          "render_video": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "video"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "video_overview_generate",
+        "input_mode": "single"
+      }
+    }
+  ]
+}

@@ -15,6 +15,19 @@ jobs:
       - run: python3 scripts/lint-tool-descriptions.py --self-test
       - run: python3 scripts/lint-tool-descriptions.py
 
+  python:
+    name: Python notebook skills
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run Python tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s notebook_common/tests
+          for test_dir in mofa-notebook-*/tests scripts/tests; do
+            python3 -m unittest discover -s "$test_dir"
+          done
+
   rust:
     name: Rust (check + clippy + test)
     strategy:

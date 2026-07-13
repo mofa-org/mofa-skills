@@ -243,10 +243,6 @@ Reads `mofa/config.json` from the mofa root directory:
     "gemini": "env:GEMINI_API_KEY",
     "dashscope": "env:DASHSCOPE_API_KEY"
   },
-  "vertex": {
-    "service_account_json": "env:GOOGLE_APPLICATION_CREDENTIALS",
-    "location": "global"
-  },
   "gen_model": "gemini-3.1-flash-image-preview",
   "vision_model": "gemini-2.5-flash",
   "edit_model": "qwen-image-edit-max-2026-01-16",
