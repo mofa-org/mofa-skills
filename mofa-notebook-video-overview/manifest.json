@@ -6,6 +6,7 @@
   "tools": [
     {
       "name": "video_overview_generate",
+      "contexts": ["notebook"],
       "description": "Generate a grounded video overview from notebook sources, then render a Veo 3.1 MP4 by default.",
       "input_schema": {
         "type": "object",

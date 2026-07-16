@@ -6,6 +6,7 @@
   "tools": [
     {
       "name": "study_guide_generate",
+      "contexts": ["notebook"],
       "description": "Generate a source-grounded study guide Markdown file from notebook sources.",
       "input_schema": {
         "type": "object",
@@ -68,6 +69,7 @@
     },
     {
       "name": "faq_generate",
+      "contexts": ["notebook"],
       "description": "Generate a source-grounded FAQ Markdown file from notebook sources.",
       "input_schema": {
         "type": "object",
@@ -127,6 +129,7 @@
     },
     {
       "name": "quiz_generate",
+      "contexts": ["notebook"],
       "description": "Generate a source-grounded quiz Markdown file from notebook sources.",
       "input_schema": {
         "type": "object",
@@ -186,6 +189,7 @@
     },
     {
       "name": "flashcards_generate",
+      "contexts": ["notebook"],
       "description": "Generate source-grounded flashcards from notebook sources.",
       "input_schema": {
         "type": "object",

@@ -6,6 +6,7 @@
   "tools": [
     {
       "name": "source_import",
+      "contexts": ["notebook"],
       "description": "Import a workspace-relative file as a notebook source. Creates notebook-sources/<source_id>/source.md, metadata.json, chunks.jsonl, and updates notebook-sources/manifest.json.",
       "input_schema": {
         "type": "object",
@@ -40,6 +41,7 @@
     },
     {
       "name": "source_normalize",
+      "contexts": ["notebook"],
       "description": "Rebuild chunks and metadata for an existing notebook source id after source.md was edited.",
       "input_schema": {
         "type": "object",
@@ -54,6 +56,7 @@
     },
     {
       "name": "source_rename",
+      "contexts": ["notebook"],
       "description": "Rename an existing notebook source. Updates notebook-sources/manifest.json, metadata.json, source.md, and chunks.jsonl without changing the original uploaded file.",
       "input_schema": {
         "type": "object",
@@ -69,6 +72,7 @@
     },
     {
       "name": "source_remove",
+      "contexts": ["notebook"],
       "description": "Remove an existing notebook source from notebook-sources/manifest.json and delete its normalized notebook-sources/<source_id>/ directory. The original uploaded file is left intact.",
       "input_schema": {
         "type": "object",
@@ -83,6 +87,7 @@
     },
     {
       "name": "source_manifest",
+      "contexts": ["notebook"],
       "description": "Return the current notebook source manifest and source count.",
       "input_schema": {
         "type": "object",
@@ -95,6 +100,7 @@
     },
     {
       "name": "source_list",
+      "contexts": ["notebook"],
       "description": "Return the authoritative workspace source catalog with stable preview, timestamp, media type, and retry metadata.",
       "input_schema": {
         "type": "object",

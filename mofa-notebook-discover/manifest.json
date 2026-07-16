@@ -6,6 +6,7 @@
   "tools": [
     {
       "name": "discover_sources",
+      "contexts": ["notebook"],
       "description": "Rank source candidates for a topic and save them under notebook-outputs/discovered-sources/. This tool does not perform network access.",
       "input_schema": {
         "type": "object",
@@ -20,6 +21,7 @@
     },
     {
       "name": "import_discovered_sources",
+      "contexts": ["notebook"],
       "description": "Import local candidate files into notebook sources. Candidate objects must include a workspace-relative path.",
       "input_schema": {
         "type": "object",

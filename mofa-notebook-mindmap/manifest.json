@@ -6,6 +6,7 @@
   "tools": [
     {
       "name": "mindmap_generate",
+      "contexts": ["notebook"],
       "description": "Generate a source-grounded mind map from notebook sources.",
       "input_schema": {
         "type": "object",
