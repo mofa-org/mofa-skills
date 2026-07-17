@@ -375,7 +375,7 @@ fn fix_bbox_from_font_size(overlays: &mut [TextOverlay]) {
                 "  bbox fix: fs={:.0}pt → {:.0}pt (capped) for {:?}",
                 fs,
                 MAX_FONT_SIZE,
-                &text.chars().take(30).collect::<String>()
+                text.chars().take(30).collect::<String>()
             );
             fs = MAX_FONT_SIZE;
             ov.font_size = Some(fs);
@@ -391,7 +391,7 @@ fn fix_bbox_from_font_size(overlays: &mut [TextOverlay]) {
                 expected_h,
                 fs,
                 num_lines as u32,
-                &text.chars().take(30).collect::<String>()
+                text.chars().take(30).collect::<String>()
             );
             ov.h = expected_h;
         }
@@ -841,10 +841,19 @@ fn dedup_ocr_blocks(
     kept
 }
 
-/// The "no text" instruction appended to prompts for clean image regeneration.
-pub const NO_TEXT_INSTRUCTION: &str = "\n\nCRITICAL: DO NOT render any text, words, labels, \
-    numbers, or letters anywhere on the image. The image must be purely visual with no readable \
-    content whatsoever. Leave clean space where text would normally appear.";
+// NOTE: The legacy `NO_TEXT_INSTRUCTION` constant was removed.
+//
+// We used to auto-append a hardcoded English "DO NOT render any text" clamp to
+// every Gemini prompt whenever the slide had a `texts` overlay array. That
+// short-circuited language matching: a Chinese deck would receive English
+// directives that the model occasionally rendered literally onto the image.
+//
+// Following the cc-ppt deck-authoring pattern, language-specific Visual Quality
+// Assurance (VQA) instructions now live in the deck author's own per-deck
+// script (`const VQA = \`...\`` at the top of `script.js`, spliced into every
+// `slides[i].prompt`). The runtime no longer injects any language directives —
+// the deck IS the script. See `mofa-slides/SKILL.md` ("Authoring a deck —
+// required cc-ppt structure") for the canonical pattern.
 
 /// Anti-leak rules appended to ALL image generation prompts.
 /// Prevents Gemini from rendering formatting hints (font sizes, hex colors, CSS notation)

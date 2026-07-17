@@ -1,0 +1,112 @@
+{
+  "name": "mofa-notebook-mindmap",
+  "version": "0.1.0",
+  "description": "Generate source-grounded mind map Markdown and JSON from normalized notebook sources.",
+  "skill_md_auto_inject": true,
+  "tools": [
+    {
+      "name": "mindmap_generate",
+      "contexts": ["notebook"],
+      "description": "Generate a source-grounded mind map from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          },
+          "focus": {
+            "type": "string"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_nodes": {
+            "type": "integer"
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional output language."
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "openai",
+              "vertex"
+            ],
+            "description": "Optional model provider override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override."
+          }
+        },
+        "x-octos-host-config-keys": [
+          "workspace_root"
+        ]
+      },
+      "env": [
+        "GEMINI_API_KEY",
+        "GEMINI_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "VERTEX_SA_JSON",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL",
+        "MOFA_DATA_TABLE_PROVIDER",
+        "MOFA_DATA_TABLE_MODEL"
+      ],
+      "concurrency_class": "exclusive"
+    }
+  ],
+  "actions": [
+    {
+      "id": "mindmap.generate",
+      "label": "Mind Map",
+      "description": "Generate a source-grounded mind map from selected notebook sources.",
+      "tags": ["notebook", "artifact", "mindmap"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "focus": {
+            "type": "string"
+          },
+          "max_nodes": {
+            "type": "integer"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "mindmap"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "mindmap_generate",
+        "input_mode": "single"
+      }
+    }
+  ]
+}

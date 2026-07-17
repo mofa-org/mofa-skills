@@ -1,0 +1,126 @@
+{
+  "name": "mofa-notebook-data-table",
+  "version": "0.2.0",
+  "description": "Generate grounded data tables from imported notebook sources with cell-level citations.",
+  "tools": [
+    {
+      "name": "data_table_generate",
+      "contexts": ["notebook"],
+      "description": "Generate a grounded data table from the current project's imported notebook sources. The skill selects source chunks, calls its configured model, validates cell citations, and exports JSON, Markdown, table CSV, and citation CSV artifacts in one operation.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "string",
+            "description": "Workspace path for standalone use. Octos injects workspace_root instead."
+          },
+          "workspace_root": {
+            "type": "string",
+            "description": "Current project workspace injected by the Octos host."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Optional instructions describing the desired rows, columns, and comparison."
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional imported source IDs. Defaults to all notebook sources."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional output table title."
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional output language."
+          },
+          "max_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 100
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "openai",
+              "vertex"
+            ],
+            "description": "Optional standalone provider override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override."
+          }
+        },
+        "x-octos-host-config-keys": [
+          "workspace_root"
+        ]
+      },
+      "env": [
+        "GEMINI_API_KEY",
+        "GEMINI_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "VERTEX_SA_JSON",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "MOFA_DATA_TABLE_PROVIDER",
+        "MOFA_DATA_TABLE_MODEL",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL"
+      ],
+      "concurrency_class": "exclusive"
+    }
+  ],
+  "actions": [
+    {
+      "id": "data_table.generate",
+      "label": "Data Table",
+      "description": "Generate a cited data table from selected notebook sources.",
+      "tags": ["notebook", "artifact", "table"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "max_rows": {
+            "type": "integer"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "data_table"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "data_table_generate",
+        "input_mode": "single"
+      }
+    }
+  ],
+  "sha256": "b5a3bddb203ade0f728cf75798752efd9f0a02afb72767b80683a5cf99ccebc1"
+}

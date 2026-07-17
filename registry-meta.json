@@ -6,6 +6,9 @@
   "exclude_skills": [
     "mofa-cli"
   ],
+  "include_skill_dirs": [
+    "notebook_common"
+  ],
   "requires": ["git", "cargo"],
   "tags": [
     "ai", "pptx", "image-gen", "gemini", "batch-api",
@@ -15,6 +18,7 @@
     "tts", "voice-cloning", "speech", "audio", "qwen3-tts", "emotion",
     "podcast", "multi-speaker", "dialogue", "talk-show",
     "pdf", "excel", "xlsx", "spreadsheet",
-    "slides", "presentation", "editable", "vqa"
+    "slides", "presentation", "editable", "vqa",
+    "notebook", "source-grounded", "study", "mindmap", "video-overview"
   ]
 }

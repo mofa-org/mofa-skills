@@ -12,6 +12,32 @@
     "bins": ["ominix-api"],
     "os": ["darwin"]
   },
+  "discovery": {
+    "summary": "Multi-speaker podcast generator: review-then-render scripts to a final MP3 with built-in or cloned TTS voices.",
+    "hints": [
+      {
+        "when": "authoring or repairing the podcast script (format, dialogue lines, Chinese examples)",
+        "read": "docs/script-format.md"
+      },
+      {
+        "when": "picking an emotion tag for a dialogue line",
+        "read": "docs/emotion-tags.md"
+      },
+      {
+        "when": "inserting BGM or [PAUSE] cues (including Chinese variants)",
+        "read": "docs/cues.md"
+      },
+      {
+        "when": "choosing voices or working with cloned voices",
+        "read": "docs/voices.md"
+      },
+      {
+        "when": "understanding the generation pipeline or output paths",
+        "read": "docs/generation-engine.md"
+      }
+    ]
+  },
+  "skill_md_auto_inject": false,
   "tools": [
     {
       "name": "podcast_voices",

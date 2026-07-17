@@ -260,8 +260,11 @@ Reads `mofa/config.json` from the mofa root directory:
 | `GEMINI_API_KEY` | All pipelines | `export GEMINI_API_KEY="..."` |
 | `DASHSCOPE_API_KEY` | `--auto-layout` (editable mode), `--refine` | `export DASHSCOPE_API_KEY="..."` |
 | `DEEPSEEK_OCR_URL` | Optional: local OCR for `--auto-layout` | `export DEEPSEEK_OCR_URL="http://localhost:8080/v1/ocr"` |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Optional: Vertex AI Gemini auth | `export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"` |
 
 Use `"env:VAR_NAME"` in config.json to reference environment variables. Never commit literal keys.
+
+When `vertex` is configured, Gemini image generation, batch generation, image editing, and vision QA use Google Cloud Vertex AI instead of API-key auth. `service_account_json` accepts a service account JSON path, raw JSON, or an `env:VAR_NAME` reference; `service_account_json_path` is accepted as a path-focused alias. If the service account JSON has no `project_id`, set `project` in the `vertex` block. `location` defaults to `us-central1`; set it to `global` for the global Vertex endpoint.
 
 ### Models
 

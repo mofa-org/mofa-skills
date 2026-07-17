@@ -1,12 +1,26 @@
 {
   "name": "mofa-infographic",
-  "version": "0.4.6",
+  "version": "0.5.0",
   "make_type": "infographic",
   "content_type_description": "Multi-section infographic images (PNG) with AI-generated visuals per section. Header/footer/middle variants, configurable style template.",
   "timeout_secs": 1800,
+  "skill_md_auto_inject": false,
+  "discovery": {
+    "summary": "Generate multi-section infographic posters via Gemini, vertically stitched into a single tall PNG. Optional Qwen-Edit refinement.",
+    "hints": [
+      { "when": "user asks for an infographic / poster / 信息图 / 海报 / visual summary", "read": "SKILL.md" },
+      { "when": "picking a built-in style (cyberpunk-neon / editorial / clean-light / multi-panel) or designing a custom inline style", "read": "docs/styles.md" },
+      { "when": "listing available styles or inspecting style prompts", "list": "styles" },
+      { "when": "writing the sections JSON, picking section variants, or needing a worked example (tech / business / editorial / batch)", "read": "docs/examples.md" },
+      { "when": "choosing CLI flags, resolution (1K/2K/4K), aspect, or wiring mofa/config.json", "read": "docs/cli-flags.md" },
+      { "when": "estimating run time, hitting the 600s timeout, or deciding rt vs batch API mode", "read": "docs/api-modes-and-timing.md" },
+      { "when": "gathering preferences from the user on Telegram (style / sections / resolution) via inline keyboard", "read": "docs/interaction.md" },
+      { "when": "diagnosing why a previous run was rejected for using /tmp or another absolute path", "read": "SKILL.md" }
+    ]
+  },
   "binaries": {
     "darwin-aarch64": {
-      "url": "https://github.com/mofa-org/mofa-skills/releases/download/v1.0.1/mofa-darwin-aarch64.tar.gz"
+      "url": "https://github.com/mofa-org/mofa-skills/releases/download/v1.0.2/mofa-darwin-aarch64.tar.gz"
     }
   },
   "tools": [

@@ -119,11 +119,14 @@ Edit `mofa/config.json` — API keys use `env:VAR_NAME` to read from environment
 }
 ```
 
+For Gemini calls, the Rust CLI uses `GEMINI_API_KEY` by default. To route Gemini through Google Cloud Vertex AI instead, add a `vertex` block. `service_account_json` can be a service account JSON path, raw JSON, or an `env:VAR_NAME` reference; `service_account_json_path` is also accepted as an alias for path-based configs. If the service account JSON does not include `project_id`, set `project` explicitly. `location` defaults to `us-central1`; use `global` for the global Vertex endpoint.
+
 Or export them directly:
 
 ```bash
 export GEMINI_API_KEY="your-key-here"
 export DASHSCOPE_API_KEY="your-key-here"
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
 ```
 
 ### JavaScript engine

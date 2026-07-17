@@ -8,7 +8,7 @@
   "tools": [
     {
       "name": "mofa_frame",
-      "description": "Extract a single video frame at a specific timestamp. Use after mofa_youtube to capture key moments identified from the transcript.",
+      "description": "Extract a single video frame at a specific timestamp. Use after mofa_youtube to capture key moments identified from the transcript. NOT for video download or transcription — use `mofa_youtube` for video ingestion.",
       "input_schema": {
         "type": "object",
         "properties": {

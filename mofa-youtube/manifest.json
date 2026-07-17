@@ -8,7 +8,7 @@
   "tools": [
     {
       "name": "mofa_youtube",
-      "description": "Download a YouTube video OR accept a local audio file, then transcribe via local ASR. Returns markdown transcript with timestamps. For YouTube videos, keeps the video file for frame extraction via mofa_frame.",
+      "description": "Download a YouTube video OR accept a local audio file, then transcribe via local ASR. Returns markdown transcript with timestamps. For YouTube videos, keeps the video file for frame extraction. NOT for frame extraction — use `mofa_frame` for frame capture.",
       "input_schema": {
         "type": "object",
         "properties": {

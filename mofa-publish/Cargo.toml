@@ -1,0 +1,13 @@
+[package]
+name = "mofa-publish"
+version = "0.2.0"
+edition = "2021"
+description = "Deploy a built static site to GitHub Pages or Mac Mini hosting and verify the live URL"
+authors = ["hagency"]
+
+[[bin]]
+name = "mofa-publish"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"

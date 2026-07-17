@@ -1,0 +1,352 @@
+{
+  "name": "mofa-notebook-study",
+  "version": "0.1.0",
+  "description": "Generate source-grounded study guides, FAQs, quizzes, and flashcards from normalized notebook sources.",
+  "skill_md_auto_inject": true,
+  "tools": [
+    {
+      "name": "study_guide_generate",
+      "contexts": ["notebook"],
+      "description": "Generate a source-grounded study guide Markdown file from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          },
+          "focus": {
+            "type": "string"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional output language."
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "openai",
+              "vertex"
+            ],
+            "description": "Optional model provider override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override."
+          }
+        },
+        "x-octos-host-config-keys": [
+          "workspace_root"
+        ]
+      },
+      "env": [
+        "GEMINI_API_KEY",
+        "GEMINI_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "VERTEX_SA_JSON",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL",
+        "MOFA_DATA_TABLE_PROVIDER",
+        "MOFA_DATA_TABLE_MODEL"
+      ],
+      "concurrency_class": "exclusive"
+    },
+    {
+      "name": "faq_generate",
+      "contexts": ["notebook"],
+      "description": "Generate a source-grounded FAQ Markdown file from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional output language."
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "openai",
+              "vertex"
+            ],
+            "description": "Optional model provider override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override."
+          }
+        },
+        "x-octos-host-config-keys": [
+          "workspace_root"
+        ]
+      },
+      "env": [
+        "GEMINI_API_KEY",
+        "GEMINI_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "VERTEX_SA_JSON",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL",
+        "MOFA_DATA_TABLE_PROVIDER",
+        "MOFA_DATA_TABLE_MODEL"
+      ],
+      "concurrency_class": "exclusive"
+    },
+    {
+      "name": "quiz_generate",
+      "contexts": ["notebook"],
+      "description": "Generate a source-grounded quiz Markdown file from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional output language."
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "openai",
+              "vertex"
+            ],
+            "description": "Optional model provider override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override."
+          }
+        },
+        "x-octos-host-config-keys": [
+          "workspace_root"
+        ]
+      },
+      "env": [
+        "GEMINI_API_KEY",
+        "GEMINI_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "VERTEX_SA_JSON",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL",
+        "MOFA_DATA_TABLE_PROVIDER",
+        "MOFA_DATA_TABLE_MODEL"
+      ],
+      "concurrency_class": "exclusive"
+    },
+    {
+      "name": "flashcards_generate",
+      "contexts": ["notebook"],
+      "description": "Generate source-grounded flashcards from notebook sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "string"
+          },
+          "workspace_root": {
+            "type": "string"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional output language."
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "gemini",
+              "openai",
+              "vertex"
+            ],
+            "description": "Optional model provider override."
+          },
+          "model": {
+            "type": "string",
+            "description": "Optional model override."
+          }
+        },
+        "x-octos-host-config-keys": [
+          "workspace_root"
+        ]
+      },
+      "env": [
+        "GEMINI_API_KEY",
+        "GEMINI_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "VERTEX_SA_JSON",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "VERTEX_BASE_URL",
+        "VERTEX_ACCESS_TOKEN",
+        "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "MOFA_NOTEBOOK_PROVIDER",
+        "MOFA_NOTEBOOK_MODEL",
+        "MOFA_DATA_TABLE_PROVIDER",
+        "MOFA_DATA_TABLE_MODEL"
+      ],
+      "concurrency_class": "exclusive"
+    }
+  ],
+  "actions": [
+    {
+      "id": "reports.generate",
+      "label": "Reports",
+      "description": "Generate a source-grounded report or study guide from selected notebook sources.",
+      "tags": ["notebook", "artifact", "study"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "focus": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "report"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "study_guide_generate",
+        "input_mode": "single"
+      }
+    },
+    {
+      "id": "quiz.generate",
+      "label": "Quiz",
+      "description": "Generate a source-grounded quiz from selected notebook sources.",
+      "tags": ["notebook", "artifact", "study"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "focus": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "quiz"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "quiz_generate",
+        "input_mode": "single"
+      }
+    },
+    {
+      "id": "flashcards.generate",
+      "label": "Flashcards",
+      "description": "Generate source-grounded flashcards from selected notebook sources.",
+      "tags": ["notebook", "artifact", "study"],
+      "surfaces": ["studio.skills"],
+      "execution": "background",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "focus": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "ui_schema": {
+        "asset_kind": "flashcards"
+      },
+      "binding": {
+        "type": "tool",
+        "tool": "flashcards_generate",
+        "input_mode": "single"
+      }
+    }
+  ]
+}

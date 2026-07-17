@@ -289,6 +289,52 @@ fn find_styles_dir(mofa_root: &std::path::Path, skill_name: &str) -> PathBuf {
     mofa_root.join("mofa").join("styles")
 }
 
+/// Workspace-style lookup.
+///
+/// Returns the first existing TOML matching `style_filename` under either:
+///   1. `<cwd>/styles/<style_filename>` — direct probe (legacy behavior), or
+///   2. `<cwd.parent()>/styles/<style_filename>` — ONLY when `cwd`'s basename
+///      is exactly `skill-output`. octos pre-flight (PR #1323) accepts a
+///      TOML at the workspace root (one level above `skill-output/`) when
+///      spawn_only skills run with `work_dir=<workspace>/skill-output`,
+///      so this binary must look in the same place at runtime — otherwise
+///      pre-flight passes and the binary still errors with "style not found".
+///
+/// Direct cwd wins over parent — agents that authored a TOML in `<cwd>/styles/`
+/// should not be shadowed by a stale parent copy.
+///
+/// `cwd` is taken as a parameter (not derived from `std::env::current_dir()`)
+/// so the test suite can pin behavior without mutating process-global state.
+fn find_workspace_style(cwd: &std::path::Path, style_filename: &str) -> Option<PathBuf> {
+    let direct = cwd.join("styles").join(style_filename);
+    if direct.exists() {
+        return Some(direct);
+    }
+    if cwd.file_name().and_then(|n| n.to_str()) == Some("skill-output") {
+        if let Some(parent) = cwd.parent() {
+            let parent_style = parent.join("styles").join(style_filename);
+            if parent_style.exists() {
+                return Some(parent_style);
+            }
+        }
+    }
+    None
+}
+
+/// Build the list of workspace paths probed for `style_filename`, mirroring
+/// `find_workspace_style`. Used to compose the "style not found" diagnostic
+/// so the caller (LLM) sees exactly where the binary looked. The order
+/// matches the probe order in `find_workspace_style`.
+fn workspace_style_probe_paths(cwd: &std::path::Path, style_filename: &str) -> Vec<PathBuf> {
+    let mut paths = vec![cwd.join("styles").join(style_filename)];
+    if cwd.file_name().and_then(|n| n.to_str()) == Some("skill-output") {
+        if let Some(parent) = cwd.parent() {
+            paths.push(parent.join("styles").join(style_filename));
+        }
+    }
+    paths
+}
+
 struct PluginOutput {
     text: String,
     files: Vec<String>,
@@ -296,7 +342,10 @@ struct PluginOutput {
 
 impl From<String> for PluginOutput {
     fn from(text: String) -> Self {
-        Self { text, files: vec![] }
+        Self {
+            text,
+            files: vec![],
+        }
     }
 }
 
@@ -348,14 +397,16 @@ fn run_plugin(tool_name: &str, cancel: &std::sync::atomic::AtomicBool) -> Result
     let result: Result<(PluginOutput, serde_json::Value)> = match tool_name {
         "mofa_slides" => plugin_slides(&args, &mofa_root, &cfg, cancel).map(|(s, v)| (s.into(), v)),
         "mofa_cards" => plugin_cards(&args, &mofa_root, &cfg).map(|o| (o, serde_json::Value::Null)),
-        "mofa_comic" => plugin_comic(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null)),
+        "mofa_comic" => {
+            plugin_comic(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null))
+        }
         "mofa_infographic" => {
             plugin_infographic(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null))
         }
-        "mofa_video" => plugin_video(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null)),
-        "mofa_list_styles" => {
-            plugin_list_styles(&args, &mofa_root).map(|(s, v)| (s.into(), v))
+        "mofa_video" => {
+            plugin_video(&args, &mofa_root, &cfg).map(|s| (s.into(), serde_json::Value::Null))
         }
+        "mofa_list_styles" => plugin_list_styles(&args, &mofa_root).map(|(s, v)| (s.into(), v)),
         _ => Err(eyre::eyre!("unknown tool: {tool_name}")),
     };
 
@@ -532,12 +583,19 @@ fn plugin_slides(
     // a silent swap to a different theme hides deployment drift (e.g. an
     // older skill snapshot missing a style) and produces output that looks
     // like the LLM picked the wrong color scheme on purpose.
+    //
+    // Workspace lookup probes both `<cwd>/styles/` and (when cwd basename
+    // is `skill-output`) `<cwd.parent()>/styles/`, mirroring octos's
+    // pre-flight validator from PR #1323. Without the parent probe,
+    // pre-flight accepts a workspace-root TOML and this binary still
+    // errors out — the LLM gets a confusing "style not found" despite
+    // having authored the file in the validated location.
     let style_filename = format!("{style_name}.toml");
     let builtin_dir = find_styles_dir(mofa_root, "slides");
-    let cwd_style = std::env::current_dir()
-        .ok()
-        .map(|d| d.join("styles").join(&style_filename))
-        .filter(|p| p.exists());
+    let cwd = std::env::current_dir().ok();
+    let cwd_style = cwd
+        .as_deref()
+        .and_then(|c| find_workspace_style(c, &style_filename));
     let builtin_style = builtin_dir.join(&style_filename);
     let style_file = if let Some(ws) = cwd_style {
         ws
@@ -550,8 +608,21 @@ fn plugin_slides(
         } else {
             available.join(", ")
         };
+        // Enumerate every workspace path probed so the LLM sees exactly
+        // where the binary looked. The skill_dir (builtin) probe is
+        // always last in the precedence chain — emit it too.
+        let mut probed: Vec<String> = cwd
+            .as_deref()
+            .map(|c| workspace_style_probe_paths(c, &style_filename))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| p.display().to_string())
+            .collect();
+        probed.push(builtin_style.display().to_string());
+        let probed_str = probed.join(", ");
         eyre::bail!(
-            "style '{style_name}' not found. Available: {list}. \
+            "style '{style_name}' not found. Probed: {probed_str}. \
+             Available: {list}. \
              Call the `mofa_list_styles` tool to inspect variants and descriptions."
         );
     };
@@ -683,7 +754,11 @@ fn plugin_cards(
         .collect();
 
     Ok(PluginOutput {
-        text: format!("Generated {} card(s) in {}", cards.len(), card_dir.display()),
+        text: format!(
+            "Generated {} card(s) in {}",
+            cards.len(),
+            card_dir.display()
+        ),
         files,
     })
 }
@@ -1447,4 +1522,98 @@ fn condense_xml(xml: &str) -> Result<String> {
         }
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{find_workspace_style, workspace_style_probe_paths};
+    use std::fs;
+    use tempfile::tempdir;
+
+    /// Direct probe: `<cwd>/styles/<name>.toml` exists — found.
+    /// Pins legacy behavior so the new parent-probe doesn't shadow it.
+    #[test]
+    fn workspace_style_at_cwd_styles_is_found() {
+        let tmp = tempdir().expect("tempdir");
+        let cwd = tmp.path();
+        fs::create_dir_all(cwd.join("styles")).expect("mkdir styles");
+        let target = cwd.join("styles").join("sentinel.toml");
+        fs::write(&target, "[meta]\nname=\"sentinel\"\n").expect("write");
+
+        let found = find_workspace_style(cwd, "sentinel.toml");
+        assert_eq!(found.as_deref(), Some(target.as_path()));
+    }
+
+    /// Parent probe is enabled only when cwd basename is `skill-output`.
+    /// Mirrors octos PR #1323's pre-flight validator so authored TOMLs
+    /// at the workspace root are honored at runtime.
+    #[test]
+    fn workspace_style_at_cwd_parent_styles_is_found_when_cwd_is_skill_output() {
+        let tmp = tempdir().expect("tempdir");
+        let workspace = tmp.path();
+        let cwd = workspace.join("skill-output");
+        fs::create_dir_all(&cwd).expect("mkdir skill-output");
+        fs::create_dir_all(workspace.join("styles")).expect("mkdir parent styles");
+        let target = workspace.join("styles").join("sentinel.toml");
+        fs::write(&target, "[meta]\nname=\"sentinel\"\n").expect("write");
+
+        let found = find_workspace_style(&cwd, "sentinel.toml");
+        assert_eq!(found.as_deref(), Some(target.as_path()));
+    }
+
+    /// Parent probe is gated on the `skill-output` basename. For any
+    /// other cwd basename (`output`, `workspace`, etc.) we MUST NOT
+    /// blindly probe the parent — that would expand the search surface
+    /// in ways the pre-flight validator doesn't model.
+    #[test]
+    fn workspace_style_at_cwd_parent_styles_ignored_when_cwd_is_not_skill_output() {
+        let tmp = tempdir().expect("tempdir");
+        let workspace = tmp.path();
+        // Try a few innocuous basenames that are NOT `skill-output`.
+        for basename in ["output", "workspace", "out"] {
+            let cwd = workspace.join(basename);
+            fs::create_dir_all(&cwd).expect("mkdir cwd");
+            // Parent has the TOML, cwd does not.
+            let parent_styles = workspace.join("styles");
+            fs::create_dir_all(&parent_styles).ok();
+            let target = parent_styles.join("sentinel.toml");
+            fs::write(&target, "[meta]\nname=\"sentinel\"\n").expect("write");
+
+            let found = find_workspace_style(&cwd, "sentinel.toml");
+            assert!(
+                found.is_none(),
+                "expected None when cwd basename is {basename:?}, got {found:?}"
+            );
+
+            // Cleanup so the next iteration starts clean.
+            fs::remove_file(&target).ok();
+            fs::remove_dir_all(&cwd).ok();
+        }
+    }
+
+    /// The `style not found` error message must enumerate every path the
+    /// binary probed so the LLM can correct the input. This test pins
+    /// the probe list (not the error string itself — that's wrapped in
+    /// `eyre::bail!` and tested by callers).
+    #[test]
+    fn error_message_lists_all_paths_probed() {
+        let tmp = tempdir().expect("tempdir");
+        let workspace = tmp.path();
+        let cwd = workspace.join("skill-output");
+        fs::create_dir_all(&cwd).expect("mkdir skill-output");
+
+        // Inside `skill-output`, both cwd and parent should be listed.
+        let probed = workspace_style_probe_paths(&cwd, "sentinel.toml");
+        assert_eq!(probed.len(), 2, "expected cwd + parent probe paths");
+        assert_eq!(probed[0], cwd.join("styles").join("sentinel.toml"));
+        assert_eq!(probed[1], workspace.join("styles").join("sentinel.toml"));
+
+        // Outside `skill-output`, only cwd is listed (parent is NOT
+        // probed, so it must NOT appear in the diagnostic).
+        let other = workspace.join("output");
+        fs::create_dir_all(&other).expect("mkdir output");
+        let probed_other = workspace_style_probe_paths(&other, "sentinel.toml");
+        assert_eq!(probed_other.len(), 1, "only cwd should be probed");
+        assert_eq!(probed_other[0], other.join("styles").join("sentinel.toml"));
+    }
 }

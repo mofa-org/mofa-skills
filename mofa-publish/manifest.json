@@ -1,6 +1,6 @@
 {
   "name": "mofa-publish",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "make_type": "publish",
   "content_type_description": "Deploy a built static site to GitHub Pages or Mac Mini hosting. Handles repo creation, branch setup, file transfer, and verification. Returns the live URL.",
   "author": "hagency",
@@ -16,12 +16,50 @@
       "scp"
     ]
   },
+  "skill_md_auto_inject": false,
+  "discovery": {
+    "summary": "Publishes a built static site to GitHub Pages or a Mac Mini and verifies the live URL.",
+    "hints": [
+      {
+        "when": "user wants to deploy to GitHub Pages or asks about `gh-pages` / `.nojekyll`",
+        "read": "docs/github-pages.md"
+      },
+      {
+        "when": "user wants to deploy to a Mac Mini (mini1/mini3) or asks about the public Mini URL",
+        "read": "docs/mini.md"
+      },
+      {
+        "when": "SSH auth fails or user needs `--ssh-key` / `--ssh-password-env` / non-22 port flags",
+        "read": "docs/mini.md"
+      },
+      {
+        "when": "user wants CI auto-deploy on push (`setup_ci`) or a custom domain (CNAME)",
+        "read": "docs/github-pages.md"
+      },
+      {
+        "when": "site is a dynamic Node app (not a static export) and needs a reverse proxy on Mini",
+        "read": "docs/dynamic-apps.md"
+      },
+      {
+        "when": "user wants a sample Caddy reverse-proxy block for `/sites/<slug>/` or a dedicated subdomain",
+        "read": "examples/Caddyfile.proxy.example"
+      },
+      {
+        "when": "user is unsure which framework output dir to point at (Quarto/Astro/Next/plain HTML)",
+        "read": "docs/site-detection.md"
+      },
+      {
+        "when": "user wants the dual-deploy (public GitHub + private Mini) pattern or pipeline-stage overview",
+        "read": "docs/site-detection.md"
+      }
+    ]
+  },
   "tools": [
     {
       "name": "mofa_publish",
       "spawn_only": true,
       "spawn_only_message": "SUCCESS: Site deployment is now running in background. The live URL will be reported when the deploy completes. No further action needed for this request.",
-      "description": "Deploy a static site to GitHub Pages or Mac Mini hosting. Handles repo creation, branch setup, Pages configuration, file transfer, and verification. Runs in background — do NOT wait for it.",
+      "description": "Deploy a built static site to GitHub Pages or Mac Mini hosting. Handles repo creation, branch setup, Pages configuration, file transfer, and verification. NOT for site generation — use `mofa_site` for site creation. Runs in background — do NOT wait for it.",
       "input_schema": {
         "type": "object",
         "properties": {

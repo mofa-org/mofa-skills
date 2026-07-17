@@ -1,0 +1,83 @@
+{
+  "name": "mofa-xlsx",
+  "version": "0.4.1",
+  "description": "Excel spreadsheet creation, editing, and analysis with formulas, formatting, data analysis, and visualization",
+  "skill_md_auto_inject": true,
+  "discovery": {
+    "summary": "Professional Excel/spreadsheet processing — zero-error formula standard, data analysis, automated reporting, financial modeling with color coding.",
+    "hints": [
+      { "when": "creating, editing, or analyzing Excel spreadsheets, or working with formulas and formatting", "read": "SKILL.md" },
+      { "when": "needing the complete Excel processing guide with all operations", "read": "docs/00-SKILL-完整操作指南.md" }
+    ]
+  },
+  "tools": [
+    {
+      "name": "xlsx_create",
+      "description": "Create a new Excel spreadsheet with data, formulas, and formatting. Supports financial modeling with industry-standard color coding. IMPORTANT: After creating a file with formulas, always run `python scripts/recalc.py <file>` to recalculate and verify zero formula errors.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "output_path": {
+            "type": "string",
+            "description": "Path to save the output .xlsx file"
+          },
+          "sheets": {
+            "type": "array",
+            "description": "Array of sheet definitions with data, formulas, and formatting",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Sheet name"
+                },
+                "data": {
+                  "type": "array",
+                  "description": "2D array of cell values (strings, numbers, or formula strings starting with '=')"
+                }
+              },
+              "required": ["name"]
+            }
+          }
+        },
+        "required": ["output_path"]
+      }
+    },
+    {
+      "name": "xlsx_analyze",
+      "description": "Read and analyze an existing Excel spreadsheet. Extract data, compute statistics, generate summaries. Supports .xlsx, .xlsm, .csv, .tsv formats via pandas.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "input_path": {
+            "type": "string",
+            "description": "Path to the Excel/CSV file to analyze"
+          },
+          "sheet_name": {
+            "type": "string",
+            "description": "Sheet name to read. Defaults to the first sheet."
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Optional path to save analysis results as a new .xlsx file"
+          }
+        },
+        "required": ["input_path"]
+      }
+    },
+    {
+      "name": "xlsx_recalc",
+      "description": "Recalculate all formulas in an Excel file using LibreOffice and verify zero formula errors. MANDATORY after creating or editing any file with formulas. Returns JSON with status, error counts, and details.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to the .xlsx file to recalculate"
+          }
+        },
+        "required": ["file_path"]
+      }
+    }
+  ]
+}

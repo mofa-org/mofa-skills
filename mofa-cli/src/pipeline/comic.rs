@@ -113,7 +113,16 @@ pub fn run(
     gen_model: Option<&str>,
     batch: bool,
 ) -> Result<Option<PathBuf>> {
-    let gemini = cfg.gemini_key().map(GeminiClient::new);
+    // Vertex-aware: build a (possibly Vertex) client via `from_config` when
+    // either vertex SA or an api key is configured; stay `None` otherwise so
+    // the openai-only `gpt-image` path still works. Plain `gemini_key()`
+    // ignores vertex and would wrongly report "Gemini API key required" on a
+    // vertex-only setup.
+    let gemini = if cfg.vertex.is_some() || cfg.gemini_key().is_some() {
+        Some(GeminiClient::from_config(cfg)?)
+    } else {
+        None
+    };
     let openai = cfg.openai_key().map(OpenAIImageClient::new);
 
     let model = gen_model.unwrap_or(cfg.gen_model());
