@@ -1,6 +1,8 @@
 {
   "name": "mofa-publish",
   "version": "0.2.0",
+  "make_type": "publish",
+  "content_type_description": "Deploy a built static site to GitHub Pages or Mac Mini hosting. Handles repo creation, branch setup, file transfer, and verification. Returns the live URL.",
   "author": "hagency",
   "description": "Deploy a built static site to GitHub Pages or Mac Mini hosting and verify the live URL.",
   "timeout_secs": 600,

@@ -1,6 +1,8 @@
 {
   "name": "mofa-comic",
   "version": "0.4.6",
+  "make_type": "comic",
+  "content_type_description": "Multi-panel comic strips with AI-generated panel art. Layout can be horizontal, vertical, or grid.",
   "timeout_secs": 1800,
   "skill_md_auto_inject": false,
   "discovery": {

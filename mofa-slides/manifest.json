@@ -1,6 +1,8 @@
 {
   "name": "mofa-slides",
   "version": "0.7.0",
+  "make_type": "slides",
+  "content_type_description": "PPTX presentation decks. Generate AI-illustrated slides with images, optional editable text overlays, multiple style templates.",
   "timeout_secs": 1800,
   "skill_md_auto_inject": false,
   "discovery": {
