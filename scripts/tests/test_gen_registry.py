@@ -103,6 +103,26 @@ class RegistryGenerationTests(unittest.TestCase):
                         "string",
                     )
 
+    def test_all_notebook_tools_are_scoped_to_notebook_context(self):
+        tool_count = 0
+        skill_dirs = sorted(
+            path for path in ROOT.glob("mofa-notebook-*") if path.is_dir()
+        )
+        self.assertGreaterEqual(len(skill_dirs), 7)
+
+        for skill_dir in skill_dirs:
+            with self.subTest(skill_name=skill_dir.name):
+                manifest = json.loads(
+                    (skill_dir / "manifest.json").read_text(encoding="utf-8")
+                )
+                tools = manifest.get("tools", [])
+                self.assertTrue(tools)
+                tool_count += len(tools)
+                for tool in tools:
+                    self.assertEqual(tool.get("contexts"), ["notebook"])
+
+        self.assertGreaterEqual(tool_count, 18)
+
 
 if __name__ == "__main__":
     unittest.main()

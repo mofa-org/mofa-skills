@@ -6,6 +6,7 @@
   "tools": [
     {
       "name": "source_search",
+      "contexts": ["notebook"],
       "description": "Search normalized notebook source chunks. Use before source-grounded claims.",
       "input_schema": {
         "type": "object",
@@ -22,6 +23,7 @@
     },
     {
       "name": "source_lookup",
+      "contexts": ["notebook"],
       "description": "Return exact text and metadata for a notebook source chunk id.",
       "input_schema": {
         "type": "object",
@@ -36,6 +38,7 @@
     },
     {
       "name": "source_cite",
+      "contexts": ["notebook"],
       "description": "Format chunk ids as stable path and line citations.",
       "input_schema": {
         "type": "object",

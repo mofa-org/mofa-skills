@@ -5,6 +5,7 @@
   "tools": [
     {
       "name": "data_table_generate",
+      "contexts": ["notebook"],
       "description": "Generate a grounded data table from the current project's imported notebook sources. The skill selects source chunks, calls its configured model, validates cell citations, and exports JSON, Markdown, table CSV, and citation CSV artifacts in one operation.",
       "input_schema": {
         "type": "object",
