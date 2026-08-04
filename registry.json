@@ -9,19 +9,28 @@
       "mofa-fm",
       "mofa-frame",
       "mofa-infographic",
+      "mofa-notebook-data-table",
+      "mofa-notebook-discover",
+      "mofa-notebook-grounding",
+      "mofa-notebook-mindmap",
+      "mofa-notebook-source",
+      "mofa-notebook-study",
+      "mofa-notebook-video-overview",
       "mofa-pdf",
       "mofa-podcast",
       "mofa-publish",
       "mofa-site",
       "mofa-slides",
       "mofa-xlsx",
-      "mofa-youtube"
+      "mofa-youtube",
+      "notebook_common"
     ],
     "requires": [
       "git",
       "cargo",
       "curl",
       "gh",
+      "node",
       "ominix-api",
       "quarto",
       "scp",
@@ -59,7 +68,12 @@
       "slides",
       "presentation",
       "editable",
-      "vqa"
+      "vqa",
+      "notebook",
+      "source-grounded",
+      "study",
+      "mindmap",
+      "video-overview"
     ]
   }
 ]

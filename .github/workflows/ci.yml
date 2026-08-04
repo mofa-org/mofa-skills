@@ -11,7 +11,7 @@ jobs:
     name: Tool description exclusivity lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: python3 scripts/lint-tool-descriptions.py --self-test
       - run: python3 scripts/lint-tool-descriptions.py
 
@@ -19,7 +19,7 @@ jobs:
     name: Python notebook skills
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Run Python tests
         run: |
           set -euo pipefail
@@ -27,6 +27,18 @@ jobs:
           for test_dir in mofa-notebook-*/tests scripts/tests; do
             python3 -m unittest discover -s "$test_dir"
           done
+
+      # registry.json is a generated artifact committed to the repo — fail if
+      # it drifted from the generator output (same pattern as octos's
+      # providers.json drift check).
+      - name: Verify registry.json is in sync
+        run: |
+          python3 scripts/gen-registry.py --write
+          if [ -n "$(git status --porcelain registry.json)" ]; then
+            echo "registry.json is out of date. Run scripts/gen-registry.py --write and commit the result."
+            git --no-pager diff registry.json
+            exit 1
+          fi
 
   rust:
     name: Rust (check + clippy + test)
@@ -53,7 +65,7 @@ jobs:
       run:
         working-directory: ${{ matrix.package }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -66,11 +78,18 @@ jobs:
 
   sync-registry:
     name: Sync skill registry
-    needs: rust
+    # Gate on ALL checks, not just rust — a registry built from a tree whose
+    # tests are red should not reach octos-hub.
+    needs: [rust, python, tool-description-lint]
+    # Serialize syncs: without a group, two merges landing close together race
+    # on the remote file SHA and the loser fails the PUT with a red job.
+    concurrency:
+      group: sync-registry-main
+      cancel-in-progress: false
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Generate registry.json
         run: python3 scripts/gen-registry.py --write
