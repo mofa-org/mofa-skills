@@ -34,7 +34,7 @@ jobs:
       run:
         working-directory: mofa-cli
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -64,7 +64,7 @@ jobs:
               encoding="utf-8",
           )
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mofa-${{ matrix.platform }}
           path: mofa-cli/dist/mofa-${{ matrix.platform }}.tar.gz*
@@ -83,7 +83,7 @@ jobs:
       run:
         working-directory: mofa-fm
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -98,7 +98,7 @@ jobs:
           cp target/${{ matrix.target }}/release/mofa-fm dist/main
           cd dist && tar czf mofa-fm-${{ matrix.platform }}.tar.gz main
           shasum -a 256 mofa-fm-${{ matrix.platform }}.tar.gz > mofa-fm-${{ matrix.platform }}.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mofa-fm-${{ matrix.platform }}
           path: mofa-fm/dist/mofa-fm-${{ matrix.platform }}.tar.gz*
@@ -117,7 +117,7 @@ jobs:
       run:
         working-directory: mofa-podcast
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -132,7 +132,7 @@ jobs:
           cp target/${{ matrix.target }}/release/mofa-podcast dist/main
           cd dist && tar czf mofa-podcast-${{ matrix.platform }}.tar.gz main
           shasum -a 256 mofa-podcast-${{ matrix.platform }}.tar.gz > mofa-podcast-${{ matrix.platform }}.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mofa-podcast-${{ matrix.platform }}
           path: mofa-podcast/dist/mofa-podcast-${{ matrix.platform }}.tar.gz*
@@ -151,7 +151,7 @@ jobs:
       run:
         working-directory: mofa-site
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -166,7 +166,7 @@ jobs:
           cp target/${{ matrix.target }}/release/mofa-site dist/main
           cd dist && tar czf mofa-site-${{ matrix.platform }}.tar.gz main
           shasum -a 256 mofa-site-${{ matrix.platform }}.tar.gz > mofa-site-${{ matrix.platform }}.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mofa-site-${{ matrix.platform }}
           path: mofa-site/dist/mofa-site-${{ matrix.platform }}.tar.gz*
@@ -185,7 +185,7 @@ jobs:
       run:
         working-directory: mofa-publish
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -200,7 +200,7 @@ jobs:
           cp target/${{ matrix.target }}/release/mofa-publish dist/main
           cd dist && tar czf mofa-publish-${{ matrix.platform }}.tar.gz main
           shasum -a 256 mofa-publish-${{ matrix.platform }}.tar.gz > mofa-publish-${{ matrix.platform }}.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mofa-publish-${{ matrix.platform }}
           path: mofa-publish/dist/mofa-publish-${{ matrix.platform }}.tar.gz*
@@ -209,7 +209,7 @@ jobs:
     needs: [build-cli, build-fm, build-podcast, build-site, build-publish]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
       - name: Create checksums
