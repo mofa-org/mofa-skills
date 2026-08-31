@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+pub mod atlas;
 pub mod config;
 pub mod dashscope;
 pub mod deepseek_ocr;

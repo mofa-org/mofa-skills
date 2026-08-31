@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::atlas::AtlasImageClient;
 use crate::config::MofaConfig;
 use crate::dashscope::DashscopeClient;
 use crate::deepseek_ocr::DeepSeekOcrClient;
@@ -10,7 +11,7 @@ use crate::layout::{
 use crate::openai::OpenAIImageClient;
 use crate::pptx::{self, ImageOverlay, SlideData, TextOverlay};
 use crate::style::Style;
-use eyre::Result;
+use eyre::{bail, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -230,13 +231,13 @@ fn finalize_generated(path: &Path, fingerprint: &str, out_file: &Path) {
     save_to_content_store(path, fingerprint, out_file);
 }
 
-/// Route image generation to Gemini or Dashscope based on model name.
-/// Models starting with "qwen-image" go to Dashscope, everything else to Gemini.
+/// Route image generation based on model-name prefixes.
 #[allow(clippy::too_many_arguments)]
 fn generate_image(
     gemini: &GeminiClient,
     dashscope: &Option<DashscopeClient>,
     openai: &Option<OpenAIImageClient>,
+    atlas: &Option<AtlasImageClient>,
     prompt: &str,
     out_file: &Path,
     image_size: Option<&str>,
@@ -262,6 +263,26 @@ fn generate_image(
     if let Some(p) = restore_from_content_store(out_file, &fingerprint) {
         eprintln!("Cached (content-addressed): {label}");
         return Some(p);
+    }
+
+    if let Some(atlas_model) = model.strip_prefix("atlas:") {
+        if !ref_images.is_empty() {
+            eprintln!("{label}: Atlas Cloud text-to-image route does not accept reference images");
+            return None;
+        }
+        if let Some(client) = atlas {
+            return match client.gen_image(prompt, out_file, atlas_model, "16:9", label) {
+                Ok(path) => path.inspect(|path| {
+                    finalize_generated(path, &fingerprint, out_file);
+                }),
+                Err(error) => {
+                    eprintln!("{label}: Atlas Cloud generation failed ({error})");
+                    None
+                }
+            };
+        }
+        eprintln!("{label}: ATLASCLOUD_API_KEY not configured for {model}");
+        return None;
     }
 
     if model.starts_with("gpt-image") {
@@ -400,6 +421,7 @@ fn run_slides_sync(
     ocr_client: &Option<DeepSeekOcrClient>,
     dashscope: &Option<DashscopeClient>,
     openai: &Option<OpenAIImageClient>,
+    atlas: &Option<AtlasImageClient>,
     total: usize,
     concurrency: usize,
     image_size: Option<&str>,
@@ -422,6 +444,7 @@ fn run_slides_sync(
             let gemini = gemini;
             let dashscope = dashscope;
             let openai = openai;
+            let atlas = atlas;
             let ocr_client = ocr_client;
             let ref_paths = Arc::clone(&ref_paths);
             let extracted_texts = Arc::clone(&extracted_texts);
@@ -462,6 +485,7 @@ fn run_slides_sync(
                             gemini,
                             dashscope,
                             openai,
+                            atlas,
                             &full_prompt,
                             &ref_file,
                             ref_size,
@@ -541,6 +565,7 @@ fn run_slides_sync(
                         gemini,
                         dashscope,
                         openai,
+                        atlas,
                         &full_prompt,
                         &out_path,
                         image_size,
@@ -643,6 +668,14 @@ pub fn run(
         None => None,
     };
 
+    let atlas = match cfg.atlas_key() {
+        Some(key) => {
+            eprintln!("Atlas Cloud enabled (atlas: image models)");
+            Some(AtlasImageClient::new(key))
+        }
+        None => None,
+    };
+
     // Build OCR client for grounded text extraction (precise bounding boxes).
     // When available: OCR+VQA mode. When absent: VQA-only mode.
     let ocr_client = match cfg.ocr_url() {
@@ -666,6 +699,23 @@ pub fn run(
             eprintln!("Warning: DASHSCOPE_API_KEY not set (needed for Qwen-Edit text removal)");
             None
         }
+    };
+
+    let uses_atlas = gen_model.unwrap_or(cfg.gen_model()).starts_with("atlas:")
+        || slides.iter().any(|slide| {
+            slide
+                .gen_model
+                .as_deref()
+                .is_some_and(|model| model.starts_with("atlas:"))
+        });
+    if uses_atlas && slides.iter().any(|slide| slide.auto_layout) {
+        bail!("Atlas Cloud image generation does not support auto-layout slides");
+    }
+    let batch = if batch && uses_atlas {
+        eprintln!("Atlas Cloud image generation uses realtime mode; disabling Gemini batch mode");
+        false
+    } else {
+        batch
     };
 
     std::fs::create_dir_all(slide_dir)?;
@@ -811,6 +861,7 @@ pub fn run(
                         &ocr_client,
                         &dashscope,
                         &openai,
+                        &atlas,
                         total,
                         concurrency,
                         image_size,
@@ -1005,6 +1056,7 @@ pub fn run(
             let gemini = &gemini;
             let dashscope = &dashscope;
             let openai = &openai;
+            let atlas = &atlas;
             let ocr_client = &ocr_client;
             let ref_paths = Arc::clone(&ref_paths);
             let extracted_texts = Arc::clone(&extracted_texts);
@@ -1056,6 +1108,7 @@ pub fn run(
                             gemini,
                             dashscope,
                             openai,
+                            atlas,
                             &full_prompt,
                             &ref_file,
                             ref_size,
@@ -1180,6 +1233,7 @@ pub fn run(
                         gemini,
                         dashscope,
                         openai,
+                        atlas,
                         &full_prompt,
                         &out_path,
                         image_size,

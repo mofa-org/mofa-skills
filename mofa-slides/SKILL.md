@@ -33,6 +33,8 @@ If task state says completed but the workspace contract isn't ready, report the 
 
 Before generating, gather: topic, style, slide count (5-8 pitch, 10-15 deck), resolution (default 2K), `GEMINI_API_KEY` presence. Present a slide plan for confirmation. On Telegram, use inline keyboard buttons for style picks.
 
+Atlas Cloud is an optional paid image-generation route, not a replacement for the default Gemini workflow. If the user explicitly selects it, confirm `ATLASCLOUD_API_KEY`, fetch the live Atlas Cloud model catalog and schema, and pass a text-to-image model as `--gen-model atlas:<model-id>`. Review cost before submitting. The runtime sends each paid generation POST once and only polls the read-only result endpoint. Use this route only for non-auto-layout slides without reference images; Gemini batch mode is automatically disabled.
+
 ## Load-bearing anti-patterns (do not violate)
 
 1. **Do NOT memorize the style catalog.** Call `mofa_list_styles` before picking a style — the deployed copy may have more, fewer, or differently-named styles than any doc on disk. The binary errors out (no silent fallback) if you pick a name that isn't installed. If the user asks "有哪些模板？" / "list styles", call the tool — never recite. See `docs/style-prompts.md` only for inline-prompt overrides, NOT as a substitute for the live tool.

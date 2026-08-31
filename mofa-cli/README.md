@@ -241,7 +241,8 @@ Reads `mofa/config.json` from the mofa root directory:
 {
   "api_keys": {
     "gemini": "env:GEMINI_API_KEY",
-    "dashscope": "env:DASHSCOPE_API_KEY"
+    "dashscope": "env:DASHSCOPE_API_KEY",
+    "atlas": "env:ATLASCLOUD_API_KEY"
   },
   "gen_model": "gemini-3.1-flash-image-preview",
   "vision_model": "gemini-2.5-flash",
@@ -258,6 +259,7 @@ Reads `mofa/config.json` from the mofa root directory:
 | Key | Required for | Set via |
 |-----|-------------|---------|
 | `GEMINI_API_KEY` | All pipelines | `export GEMINI_API_KEY="..."` |
+| `ATLASCLOUD_API_KEY` | Optional Atlas Cloud slide images | `export ATLASCLOUD_API_KEY="..."` |
 | `DASHSCOPE_API_KEY` | `--auto-layout` (editable mode), `--refine` | `export DASHSCOPE_API_KEY="..."` |
 | `DEEPSEEK_OCR_URL` | Optional: local OCR for `--auto-layout` | `export DEEPSEEK_OCR_URL="http://localhost:8080/v1/ocr"` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Optional: Vertex AI Gemini auth | `export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"` |
@@ -265,6 +267,16 @@ Reads `mofa/config.json` from the mofa root directory:
 Use `"env:VAR_NAME"` in config.json to reference environment variables. Never commit literal keys.
 
 When `vertex` is configured, Gemini image generation, batch generation, image editing, and vision QA use Google Cloud Vertex AI instead of API-key auth. `service_account_json` accepts a service account JSON path, raw JSON, or an `env:VAR_NAME` reference; `service_account_json_path` is accepted as a path-focused alias. If the service account JSON has no `project_id`, set `project` in the `vertex` block. `location` defaults to `us-central1`; set it to `global` for the global Vertex endpoint.
+
+### Optional Atlas Cloud image generation
+
+Set `ATLASCLOUD_API_KEY`, then prefix a live Atlas Cloud image model with `atlas:` in `--gen-model` or a slide's `gen_model` field:
+
+```bash
+mofa slides deck.js --gen-model atlas:google/nano-banana/text-to-image-developer
+```
+
+Gemini remains the default. Atlas Cloud generation is opt-in, supports non-auto-layout slides without reference images, and automatically disables Gemini batch mode. Check the live Atlas Cloud model catalog and schema before choosing a model. The paid generation POST is attempted once; only the read-only result request is polled.
 
 ### Models
 

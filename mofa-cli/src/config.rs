@@ -136,6 +136,16 @@ impl MofaConfig {
         std::env::var("OPENAI_API_KEY").ok()
     }
 
+    /// Resolve the Atlas Cloud API key from config or env.
+    pub fn atlas_key(&self) -> Option<String> {
+        if let Some(val) = self.api_keys.get("atlas") {
+            if let Some(k) = resolve_key(val) {
+                return Some(k);
+            }
+        }
+        std::env::var("ATLASCLOUD_API_KEY").ok()
+    }
+
     /// Resolve the Dashscope API key from config or env.
     pub fn dashscope_key(&self) -> Option<String> {
         if let Some(val) = self.api_keys.get("dashscope") {
